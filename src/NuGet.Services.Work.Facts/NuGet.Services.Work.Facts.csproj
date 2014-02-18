@@ -152,6 +152,7 @@
       <Link>Properties\CommonAssemblyInfo.cs</Link>
     </Compile>
     <Compile Include="Common\AssertEx.cs" />
+    <Compile Include="Helpers\SqlConnectionStringBuilderExtensionsFacts.cs" />
     <Compile Include="Infrastructure\JobRunnerFacts.cs" />
     <Compile Include="InvocationPayloadSerializerFacts.cs" />
     <Compile Include="Models\DatabaseBackupMetadataFacts.cs" />
