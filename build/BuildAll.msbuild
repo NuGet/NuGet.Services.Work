@@ -27,12 +27,12 @@
         </ItemGroup>
         <PropertyGroup>
             <NuGetExePath>$(MsBuildThisFileDirectory)\nuget.exe</NuGetExePath>
-            <RestoreCommandV2>$(NuGetExePath) restore -source "@(PackageSources)" "@(SolutionFile)" -NonInteractive -Verbosity Quiet</RestoreCommandV2>
+            <RestoreCommand>$(NuGetExePath) restore -source "@(PackageSource)" "@(SolutionFile)" -NonInteractive -Verbosity Quiet</RestoreCommand>
         </PropertyGroup>
     
         <Message Text="Restoring packages ... " Importance="high" />
         <DownloadNuGet OutputFilename="$(NuGetExePath)" Condition=" !Exists('$(NuGetExePath)')" />
-        <Exec Command="$(RestoreCommandV2)" LogStandardErrorAsError="true" />
+        <Exec Command="$(RestoreCommand)" LogStandardErrorAsError="true" />
     </Target>
   
     <Target Name="CoreBuild">
