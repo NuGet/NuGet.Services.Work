@@ -47,6 +47,8 @@ namespace NuGet.Services.Work.Jobs
                 throw new ArgumentNullException("One of the connection string parameters or the string itself is null");
             }
 
+            cstr.TrimNetworkProtocol();
+
             if (SourceStorageAccountName == null && SourceStorageAccountKey == null)
             {
                 var sourceCredentials = Config.Storage.Primary.Credentials;

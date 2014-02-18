@@ -45,6 +45,8 @@ namespace NuGet.Services.Work.Jobs
             Source = Source ?? Config.Storage.Backup;
             Destination = Destination ?? Config.Storage.Primary;
 
+            PackageDatabase.TrimNetworkProtocol();
+
             SourceContainer = Source.CreateCloudBlobClient().GetContainerReference(
                 String.IsNullOrEmpty(SourceContainerName) ? BlobContainerNames.Backups : SourceContainerName);
             DestinationContainer = Destination.CreateCloudBlobClient().GetContainerReference(

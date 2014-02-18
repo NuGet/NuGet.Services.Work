@@ -41,5 +41,15 @@ namespace System.Data.SqlClient
             await c.OpenAsync().ConfigureAwait(continueOnCapturedContext: false);
             return c;
         }
+
+        public static void TrimNetworkProtocol(this SqlConnectionStringBuilder cstr)
+        {
+            int colonIndex = cstr.DataSource.IndexOf(':');
+            if(colonIndex > -1 && colonIndex < cstr.DataSource.Length)
+            {
+                var trimmedcstr = cstr.DataSource.Substring(colonIndex + 1);
+                cstr.DataSource = trimmedcstr;
+            }
+        }
     }
 }
