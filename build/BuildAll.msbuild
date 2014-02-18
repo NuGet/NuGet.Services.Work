@@ -15,6 +15,10 @@
         <MSBuild Projects="@(TargetSolution)" Targets="Clean" Properties="Configuration=$(Configuration);Platform=$(Platform)" />
     </Target>
 
+    <ItemGroup>
+      <RoleProject Include="$(SourceDirectory)\**\*.ccproj" />
+    </ItemGroup>
+
     <Target Name="RestorePackages">
         <ItemGroup>
             <!-- Package sources used to restore packages. By default will used the registered sources under %APPDATA%\NuGet\NuGet.Config -->

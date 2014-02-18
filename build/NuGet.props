@@ -22,10 +22,6 @@
     <CommonSourceDirectory>$(SourceDirectory)\Common</CommonSourceDirectory>
   </PropertyGroup>
 
-  <ItemGroup>
-    <RoleProject Include="$(SourceDirectory)\src\**\*.ccproj" />
-  </ItemGroup>
-
   <Target Name="CheckForMultipleSolutions">
     <Error Text="Multiple solutions exist in $(RootDirectory)!" Condition="'@(SolutionFile->Count())' &gt; 1" />
   </Target>
