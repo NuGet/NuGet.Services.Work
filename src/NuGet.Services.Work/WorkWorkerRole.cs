@@ -21,5 +21,10 @@ using NuGet.Services.Work.Configuration;
 
 namespace NuGet.Services.Work
 {
-    public class WorkWorkerRole : SingleServiceWorkerRole<WorkService> {}
+    public class WorkWorkerRole : SingleServiceWorkerRole<WorkService> {
+        public override bool OnStart()
+        {
+            return base.OnStart();
+        }
+    }
 }

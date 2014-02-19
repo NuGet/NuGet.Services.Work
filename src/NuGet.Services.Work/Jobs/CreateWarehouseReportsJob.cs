@@ -122,7 +122,7 @@ namespace NuGet.Services.Work.Jobs
                         var jobj = MakeReportJson(t);
                         TotalDownloads(jobj);
                         SortItems(jobj);
-                        return Task.FromResult(jobj.ToString(JsonFormat.SerializerSettings.Formatting));
+                        return jobj.ToString(JsonFormat.SerializerSettings.Formatting);
                     },
                     Tuple.Create("@PackageId", 128, package.PackageId)).Wait();
                 if (!all)
@@ -208,10 +208,10 @@ namespace NuGet.Services.Work.Jobs
 
         private Task CreateReport(string reportName, string scriptName, params Tuple<string, int, string>[] parameters)
         {
-            return CreateReport(reportName, scriptName, table => JsonFormat.SerializeAsync(table, camelCase: false), parameters);
+            return CreateReport(reportName, scriptName, table => JsonFormat.Serialize(table, camelCase: false), parameters);
         }
 
-        private async Task CreateReport(string reportName, string scriptName, Func<DataTable, Task<string>> jsonSerializer, params Tuple<string, int, string>[] parameters)
+        private async Task CreateReport(string reportName, string scriptName, Func<DataTable, string> jsonSerializer, params Tuple<string, int, string>[] parameters)
         {
             Log.GeneratingSingleReport(reportName, scriptName);
 
@@ -219,7 +219,7 @@ namespace NuGet.Services.Work.Jobs
 
             // Transform the data table to JSON and process it with any provided transforms
             Log.ProcessingReport(reportName);
-            string json = await jsonSerializer(table);
+            string json = jsonSerializer(table);
             Log.ProcessedReport(reportName);
 
             await WriteReport(reportName, json);
