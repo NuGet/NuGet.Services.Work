@@ -65,7 +65,7 @@ namespace NuGet.Services.Work.Jobs
             // Load default data if not provided
             PackageDatabase = PackageDatabase ?? Config.Sql.GetConnectionString(KnownSqlConnection.Legacy);
             Source = Source ?? Config.Storage.Legacy;
-            Destination = Destination ?? Config.Storage.Backup;
+            Destination = Destination ?? Config.Storage.Legacy;
             SourceContainer = Source.CreateCloudBlobClient().GetContainerReference(
                 String.IsNullOrEmpty(SourceContainerName) ? BlobContainerNames.LegacyPackages : SourceContainerName);
             DestinationContainer = Destination.CreateCloudBlobClient().GetContainerReference(
