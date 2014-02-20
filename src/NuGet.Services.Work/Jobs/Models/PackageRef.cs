@@ -8,6 +8,12 @@ namespace NuGet.Services.Work.Jobs.Models
 {
     public class PackageRef
     {
+        public PackageRef(string id, string version, string hash)
+        {
+            Id = id;
+            Version = version;
+            Hash = hash;
+        }
         public PackageRef(string id, string version, string hash, DateTime lastEdited)
         {
             Id = id;
