@@ -36,7 +36,7 @@ namespace NuGet.Services.Work.Jobs
 
         protected internal override async Task Execute()
         {
-            Source = Source ?? Config.Storage.Primary;
+            Source = Source ?? Config.Storage.Legacy;
             Destination = Destination ?? Config.Storage.Backup;
 
             SourceContainer = Source.CreateCloudBlobClient().GetContainerReference(
