@@ -66,7 +66,7 @@ namespace NuGet.Services.Work.Jobs
             }
             else
             {
-                throw new InvalidOperationException(Strings.CreateWarehouseReportsJob_NoDestinationAvailable);
+                throw new InvalidOperationException(Strings.WarehouseJob_NoDestinationAvailable);
             }
 
             foreach (var reportBuilder in _globalReportBuilders)

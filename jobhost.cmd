@@ -1,0 +1,1 @@
+@%~dp0src\JobHost\bin\Debug\JobHost.exe %*

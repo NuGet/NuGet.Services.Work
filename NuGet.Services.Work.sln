@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
-VisualStudioVersion = 12.0.21005.1
+VisualStudioVersion = 12.0.30110.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{00D1A9C2-B5F0-4AF3-8072-F6C62B433612}") = "NuGet.Services.Work.Database", "src\NuGet.Services.Work.Database\NuGet.Services.Work.Database.sqlproj", "{A8B0845E-CF36-4ADB-B641-CA8542202878}"
 EndProject
@@ -17,6 +17,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 	ProjectSection(SolutionItems) = preProject
 		nuget.config = nuget.config
 	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JobHost", "src\JobHost\JobHost.csproj", "{6A98537C-EE21-46E6-AB13-3E04637A72CF}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -94,6 +96,14 @@ Global
 		{19324B97-1C22-49E2-8C1A-E4EAB682A974}.Release|x64.Build.0 = Release|Any CPU
 		{19324B97-1C22-49E2-8C1A-E4EAB682A974}.Release|x86.ActiveCfg = Release|Any CPU
 		{19324B97-1C22-49E2-8C1A-E4EAB682A974}.Release|x86.Build.0 = Release|Any CPU
+		{6A98537C-EE21-46E6-AB13-3E04637A72CF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6A98537C-EE21-46E6-AB13-3E04637A72CF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6A98537C-EE21-46E6-AB13-3E04637A72CF}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{6A98537C-EE21-46E6-AB13-3E04637A72CF}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{6A98537C-EE21-46E6-AB13-3E04637A72CF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6A98537C-EE21-46E6-AB13-3E04637A72CF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6A98537C-EE21-46E6-AB13-3E04637A72CF}.Release|x64.ActiveCfg = Release|Any CPU
+		{6A98537C-EE21-46E6-AB13-3E04637A72CF}.Release|x86.ActiveCfg = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
