@@ -91,6 +91,7 @@ namespace NuGet.Services.Work.Jobs
             }
             else
             {
+                await DestinationContainer.CreateIfNotExistsAsync();
                 await WriteToBlob(report);
             }
         }
