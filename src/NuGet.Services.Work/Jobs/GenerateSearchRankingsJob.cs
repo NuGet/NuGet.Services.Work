@@ -39,6 +39,9 @@ namespace NuGet.Services.Work.Jobs
         {
             LoadDefaults();
 
+            // Extend the job lease to 30 minutes, since this job only runs daily
+            await Extend(TimeSpan.FromMinutes(30));
+
             if (!String.IsNullOrEmpty(OutputDirectory))
             {
                 Log.GeneratingSearchRankingReport(WarehouseConnection.DataSource, WarehouseConnection.InitialCatalog, OutputDirectory);
