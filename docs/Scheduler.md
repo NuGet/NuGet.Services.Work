@@ -49,3 +49,11 @@ Invoke the CreateOnlineDatabaseBackup job every 10 minutes to create a live copy
 $pass = Get-AdminKey work
 nucmd scheduler newjob -j CreateOnlineDatabaseBackup -i BackupPrimaryDatabase -pass $pass -p "{TargetServer:'Primary',MaxAge:'00:45:00'}" -sing -f Minute -in 10
 ```
+
+Invoke the ImportDatabase job every 10 minutes to import a database if the latest changes are not imported already. But do not invoke this job if it is already running (Singleton Job). Note that we want to run this job on the failover DC. Let us assume that the failover DC is 'East Asia' and the that the service url is stored in $url (WorkService URL can be picked from the portal for the time being). If your failover DC is in a different region, you can find the right EndPoint Uri from http://sqldacexamples.codeplex.com/
+
+
+```posh
+$pass = Get-AdminKey work 1
+nucmd scheduler newjob -j ImportDatabase -i ImportDatabaseIntoFailOverDC -pass $pass -p "{'EndPointUri' : 'https://hkgprod-dacsvc.azure.com/DACWebService.svc/'}" -sing -f Minute -in 10 -url $url
+```
