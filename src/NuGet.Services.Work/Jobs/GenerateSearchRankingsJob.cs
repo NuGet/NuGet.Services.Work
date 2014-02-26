@@ -137,7 +137,7 @@ namespace NuGet.Services.Work.Jobs
         private void LoadDefaults()
         {
             WarehouseConnection = WarehouseConnection ?? Config.Sql.Warehouse;
-            Destination = Destination ?? Config.Storage.Legacy;
+            Destination = Destination ?? Config.Storage.Primary;
             if (Destination != null)
             {
                 DestinationContainer = Destination.CreateCloudBlobClient().GetContainerReference(
