@@ -68,16 +68,25 @@ NOTE: If this is the first deployment, you will be prompted to enter the name of
 
 3. Paste the new storage connection string in as the new value for `Storage.Primary` **AND** `Microsoft.WindowsAzure.Plugins.Diagnostics.ConnectionString` CSCFG settings
 
-4. Set the admin password for each SQL Server, using the Azure Portal, to a new random value. This should be done **shortly before deploying**. Changing the password will immediately cause the Work service to fail to execute jobs, which is fine, but the new service, with the new password, should be deployed as soon as possible.
+4. Create a new SQL User on the primary and warehouse databases using `nucmd`. You will need the admin password for ths SQL server to execute the command:
+
+```posh
+nucmd db createuser -sv work -s work -db primary -c
+# The new Sql.Primary connection string will now be in your clipboard, paste it! Then run:
+nucmd db createuser -sv work -s dbo -db warehouse -c
+# Now the new Sql.Warehouse connection string is in your clipboard.
+```
+
+5. Reset the admin password for the Legacy SQL Server using the Azure Portal. This should be done **shortly before deploying**. Changing the password will cause some Work service jobs to fail, which is fine, but the new service, with the new password, should be deployed as soon as possible.
 
 5. Update the 'Sql.*' settings as appropriate.
 
 ### Part 3. Deploy the package
-First, generate a deployment name:
+First, create a deployment name by combining the Commit Hash from the TeamCity build of the Work Service used to deploy. The format we use is:
 
-```posh
-Get-DeploymentName | clip
-```
+    2014Feb26 @ 1440 (<hash> on <branch>)
+    
+Replace the two segments (surrounding the `@`) with the current local date and 24-hr clock time.
 
 Upload the CSPKG and CSCFG file using to the destination service using the Azure portal. For the work service, there is no use in deploying to Staging and VIP swapping, the package should be deployed directly to production. Since the front-end HTTP API is not something that users will access, a VIP swap introduces both an unnecessary step and a possibility for work being done by both the Production and Staging Work Services, which is not a terrible thing, but is an unnecessary complexity.
 
