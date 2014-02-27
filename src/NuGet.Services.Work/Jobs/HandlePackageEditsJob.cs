@@ -76,7 +76,7 @@ namespace NuGet.Services.Work.Jobs
             MaxManifestSize = MaxAllowedManifestBytes ?? DefaultMaxAllowedManifestBytes;
             PackageDatabase = PackageDatabase ?? Config.Sql.GetConnectionString(KnownSqlConnection.Legacy);
             Source = Source ?? Storage.Legacy.Account;
-            Backups = Backups ?? Storage.Backup.Account;
+            Backups = Backups ?? Storage.Legacy.Account;
             SourceContainer = Source.CreateCloudBlobClient().GetContainerReference(
                 String.IsNullOrEmpty(SourceContainerName) ? BlobContainerNames.LegacyPackages : SourceContainerName);
             BackupsContainer = Backups.CreateCloudBlobClient().GetContainerReference(
