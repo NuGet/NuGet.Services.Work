@@ -12,7 +12,7 @@
             <!-- SQL Connections -->
             <Setting name="Sql.Primary" value="Data Source=(LocalDB)\v11.0;Initial Catalog=nuget-local-0;Integrated Security=SSPI" />
             <Setting name="Sql.Legacy" value="Data Source=(LocalDB)\v11.0;Initial Catalog=NuGetGallery;Integrated Security=SSPI" />
-            <Setting name="Sql.Warehouse" value="Data Source=(LocalDB)\v11.0;Initial Catalog=NuGetWarehouse;Integrated Security=SSPI" />
+            <Setting name="Sql.Warehouse" value="Data Source=(LocalDB)\v11.0;Initial Catalog=nuget-local-0-warehouse;Integrated Security=SSPI" />
             
             <Setting name="Work.PollInterval" value="00:00:15" />
             <Setting name="Work.WorkersPerCore" value="2" />
