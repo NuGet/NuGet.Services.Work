@@ -130,6 +130,9 @@
     <Reference Include="System.Reactive.Linq">
       <HintPath>..\..\packages\Rx-Linq.2.2.2\lib\net45\System.Reactive.Linq.dll</HintPath>
     </Reference>
+    <Reference Include="System.Reactive.PlatformServices">
+      <HintPath>..\..\packages\Rx-PlatformServices.2.2.2\lib\net45\System.Reactive.PlatformServices.dll</HintPath>
+    </Reference>
     <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.ServiceModel" />
     <Reference Include="System.Spatial, Version=5.6.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
@@ -191,10 +194,13 @@
     <Compile Include="Jobs\Bases\DatabaseJobHandlerBase.cs" />
     <Compile Include="Jobs\CreateWarehouseReportsJob.cs" />
     <Compile Include="Jobs\ExportDatabaseJob.cs" />
+    <Compile Include="Jobs\GenerateSearchRankingsJob.cs" />
     <Compile Include="Jobs\HandlePackageEditsJob.cs" />
     <Compile Include="Jobs\ImportDatabaseJob.cs" />
     <Compile Include="Jobs\Models\PackageEdit.cs" />
     <Compile Include="Jobs\Models\PackageRef.cs" />
+    <Compile Include="Jobs\Models\SearchRankingEntry.cs" />
+    <Compile Include="Jobs\Models\SearchRankingReport.cs" />
     <Compile Include="Jobs\PurgeCompletedInvocationsJob.cs" />
     <Compile Include="Jobs\PurgePackageStatisticsJob.cs" />
     <Compile Include="Jobs\ReplicatePackageStatisticsJob.cs" />
@@ -256,6 +262,10 @@
     <EmbeddedResource Include="Jobs\Scripts\DownloadReport_RecentPopularityByPackage.sql" />
     <EmbeddedResource Include="Jobs\Scripts\DownloadReport_RecentPopularityDetail.sql" />
     <EmbeddedResource Include="Jobs\Scripts\DownloadReport_RecentPopularityDetailByPackage.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Jobs\Scripts\SearchRanking_ByProjectType.sql" />
+    <EmbeddedResource Include="Jobs\Scripts\SearchRanking_Overall.sql" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="$(BuildToolsDirectory)\NuGet.targets" />
