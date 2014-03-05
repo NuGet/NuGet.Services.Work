@@ -33,7 +33,7 @@ namespace NuGet.Services.Work.Monitoring
 
         public override void Flush()
         {
-            _receiver(_buffer.ToString());
+            _receiver(_buffer.ToString().Trim());
             _buffer.Clear();
         }
 

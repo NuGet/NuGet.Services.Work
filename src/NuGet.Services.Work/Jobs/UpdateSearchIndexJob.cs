@@ -22,7 +22,10 @@ namespace NuGet.Services.Work.Jobs
             {                
                 SqlConnectionString = PackageDatabase.ConnectionString,
                 StorageAccount = StorageAccount,
-                Container = StorageContainerName ?? "ng-search",
+                Container = String.IsNullOrEmpty(LocalIndexFolder) ? 
+                    (StorageContainerName ?? "ng-search") :
+                    null,
+                Folder = LocalIndexFolder,
                 Log = new EventSourceWriter(Log.IndexingTrace),
             };
             task.Execute();
@@ -34,6 +37,9 @@ namespace NuGet.Services.Work.Jobs
     [EventSource(Name="Outercurve-NuGet-Jobs-UpdateSearchIndex")]
     public class UpdateSearchIndexEventSource : EventSource
     {
+        public static readonly UpdateSearchIndexEventSource Log = new UpdateSearchIndexEventSource();
+        private UpdateSearchIndexEventSource() { }
+
         [Event(
             eventId: 1,
             Level = EventLevel.Informational,

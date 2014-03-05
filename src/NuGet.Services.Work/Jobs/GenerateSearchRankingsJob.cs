@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Dapper;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NuGet.Services.Client;
 using NuGet.Services.Configuration;
@@ -56,8 +57,10 @@ namespace NuGet.Services.Work.Jobs
             }
 
             // Gather overall rankings
+            JObject report = new JObject();
             Log.GatheringOverallRankings(WarehouseConnection.DataSource, WarehouseConnection.InitialCatalog);
             var overallData = await GatherOverallRankings();
+            report.Add("Rank", overallData);
             Log.GatheredOverallRankings(overallData.Count);
 
             // Get project types
@@ -66,26 +69,17 @@ namespace NuGet.Services.Work.Jobs
             Log.GotAvailableProjectTypes(projectTypes.Count);
 
             // Gather data by project type
-            IDictionary<string, IList<SearchRankingEntry>> byProjectType = new Dictionary<string, IList<SearchRankingEntry>>();
             int count = 0;
             Log.GatheringProjectTypeRankings(WarehouseConnection.DataSource, WarehouseConnection.InitialCatalog);
             foreach (var projectType in projectTypes)
             {
                 Log.GatheringProjectTypeRanking(WarehouseConnection.DataSource, WarehouseConnection.InitialCatalog, projectType);
                 var data = await GatherProjectTypeRanking(projectType);
+                report.Add(projectType, data);
                 Log.GatheredProjectTypeRanking(data.Count, projectType);
                 count += data.Count;
-
-                byProjectType.Add(projectType, data);
             }
             Log.GatheredProjectTypeRankings(count);
-
-            // Generate the report
-            var report = new SearchRankingReport()
-            {
-                Overall = overallData,
-                ByProjectType = byProjectType
-            };
 
             // Write the JSON blob
             if (!String.IsNullOrEmpty(OutputDirectory))
@@ -99,7 +93,7 @@ namespace NuGet.Services.Work.Jobs
             }
         }
 
-        private async Task WriteToFile(SearchRankingReport report)
+        private async Task WriteToFile(JObject report)
         {
             string fullPath = Path.Combine(OutputDirectory, ReportName);
             string parentDir = Path.GetDirectoryName(fullPath);
@@ -116,20 +110,20 @@ namespace NuGet.Services.Work.Jobs
                 }
                 using (var writer = new StreamWriter(File.OpenWrite(fullPath)))
                 {
-                    await writer.WriteAsync(JsonFormat.Serialize(report));
+                    await writer.WriteAsync(report.ToString(Formatting.Indented));
                 }
             }
             Log.WroteReportBlob(fullPath);
         }
 
-        private async Task WriteToBlob(SearchRankingReport report)
+        private async Task WriteToBlob(JObject report)
         {
             var blob = DestinationContainer.GetBlockBlobReference(ReportName);
             Log.WritingReportBlob(blob.Uri.AbsoluteUri);
             if (!WhatIf)
             {
                 blob.Properties.ContentType = MimeTypes.Json;
-                await blob.UploadTextAsync(JsonFormat.Serialize(report));
+                await blob.UploadTextAsync(report.ToString(Formatting.Indented));
             }
             Log.WroteReportBlob(blob.Uri.AbsoluteUri);
         }
@@ -145,7 +139,7 @@ namespace NuGet.Services.Work.Jobs
             }
         }
 
-        private async Task<IList<SearchRankingEntry>> GatherOverallRankings()
+        private async Task<JArray> GatherOverallRankings()
         {
             using (var connection = await WarehouseConnection.ConnectTo())
             {
@@ -153,7 +147,9 @@ namespace NuGet.Services.Work.Jobs
                 var script = await ResourceHelpers.ReadResourceFile("NuGet.Services.Work.Jobs.Scripts.SearchRanking_Overall.sql");
 
                 // Execute it and return the results
-                return (await connection.QueryAsync<SearchRankingEntry>(script)).ToList();
+                return new JArray(
+                    (await connection.QueryAsync<SearchRankingEntry>(script))
+                        .Select(e => e.PackageId));
             }
         }
 
@@ -166,7 +162,7 @@ namespace NuGet.Services.Work.Jobs
             }
         }
 
-        private async Task<IList<SearchRankingEntry>> GatherProjectTypeRanking(string projectType)
+        private async Task<JArray> GatherProjectTypeRanking(string projectType)
         {
             using (var connection = await WarehouseConnection.ConnectTo())
             {
@@ -174,7 +170,9 @@ namespace NuGet.Services.Work.Jobs
                 var script = await ResourceHelpers.ReadResourceFile("NuGet.Services.Work.Jobs.Scripts.SearchRanking_ByProjectType.sql");
 
                 // Execute it and return the results
-                return (await connection.QueryAsync<SearchRankingEntry>(script, new { ProjectGuid = projectType })).ToList();
+                return new JArray(
+                    (await connection.QueryAsync<SearchRankingEntry>(script, new { ProjectGuid = projectType }))
+                        .Select(e => e.PackageId));
             }
         }
     }

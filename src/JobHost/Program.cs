@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.Tracing;
 using System.Linq;
 using System.Text;
@@ -13,6 +14,12 @@ namespace NuGet.Services.Work.JobHost
     {
         static void Main(string[] args)
         {
+            if (args.Length > 0 && String.Equals(args[0], "dbg", StringComparison.OrdinalIgnoreCase))
+            {
+                args = args.Skip(1).ToArray();
+                Debugger.Launch();
+            }
+
             Arguments parsed;
             try
             {
