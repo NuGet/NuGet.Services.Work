@@ -12,6 +12,9 @@ using Microsoft.WindowsAzure.Storage.Blob;
 using NuGet.Services.Storage;
 using System.Reactive.Subjects;
 using Microsoft.Practices.EnterpriseLibrary.SemanticLogging.Sinks;
+using System.Reactive;
+using Microsoft.WindowsAzure.Storage;
+using Microsoft.WindowsAzure.Storage.Blob.Protocol;
 
 namespace NuGet.Services.Work.Monitoring
 {
@@ -64,11 +67,12 @@ namespace NuGet.Services.Work.Monitoring
 
     public class BlobInvocationLogCapture : InvocationLogCapture
     {
-        private SinkSubscription<FlatFileSink> _eventSubscription;
+        private IDisposable _eventSubscription;
 
-        private readonly string _tempDirectory;
-        private string _tempFile;
         private string _blobName;
+
+        private CloudBlockBlob _logBlob;
+        private JsonEventTextFormatter _formatter;
 
         public StorageHub Storage { get; private set; }
 
@@ -77,50 +81,116 @@ namespace NuGet.Services.Work.Monitoring
         {
             Storage = storage;
 
-            _tempDirectory = Path.Combine(Path.GetTempPath(), "InvocationLogs");
             _blobName = invocation.Id.ToString("N") + ".json";
+            _logBlob = Storage.Primary.Blobs.GetBlob(WorkService.InvocationLogsContainerBaseName, "invocations/" + _blobName);
+            _formatter = new JsonEventTextFormatter(EventTextFormatting.Indented, dateTimeFormat: "O");
         }
 
         public override async Task Start()
         {
             await base.Start();
-
-            // Calculate paths
-            if (!Directory.Exists(_tempDirectory))
-            {
-                Directory.CreateDirectory(_tempDirectory);
-            }
-
-            // Generate an entirely unique file name
-            string fileName = Invocation.Id.ToString("N") + "_" + Guid.NewGuid().ToString("N") + ".json";
-            _tempFile = Path.Combine(_tempDirectory, fileName);
-            if (File.Exists(_tempFile))
-            {
-                File.Delete(_tempFile);
-            }
             
-            // Fetch the current logs if this is a continuation, we'll append to them during the invocation
-            if (Invocation.IsContinuation)
-            {
-                await Storage.Primary.Blobs.DownloadBlob(WorkService.InvocationLogsContainerBaseName, "invocations/" + _blobName, _tempFile);
-            }
-            
-            // Capture the events into a JSON file and a plain text file
-            _eventSubscription = this.LogToFlatFile(_tempFile, new JsonEventTextFormatter(EventTextFormatting.Indented, dateTimeFormat: "O"));
+            _eventSubscription = this.Buffer(TimeSpan.FromSeconds(5), 10)
+                .Select(events => Observable.FromAsync(() => FlushEvents(events)))
+                .Concat()
+                .Subscribe(); // Side-effects are all that matter here
         }
 
-        public override async Task<Uri> End()
+        private async Task<Unit> FlushEvents(IList<EventEntry> events)
+        {
+            // Build the new entries
+            StringBuilder newContent = new StringBuilder();
+            using (StringWriter writer = new StringWriter(newContent))
+            {
+                foreach (var evt in events)
+                {
+                    _formatter.WriteEvent(evt, writer);
+                }
+            }
+
+            int tries = 1;
+            bool conflict = true;
+            while(tries <= 3 && conflict) {
+                conflict = false;
+                // We're doing optimistic concurrency here, so we just do an upload If-Match at the end 
+                // using the ETag from the first result.
+                // There should only be one worker running a particular invocation, so this should work
+                // but if not, we just retry later
+
+                // Download the current text
+                // We could do Exists, then DownloadText, but this has two advantages:
+                //  1. Single operation to download the current text and check if it exists
+                //  2. Avoids a race between Exists and DownloadText
+                StringBuilder content;
+                try
+                {
+                    content = new StringBuilder(await _logBlob.DownloadTextAsync());
+                }
+                catch (StorageException ex)
+                {
+                    if(ex.RequestInformation != null && 
+                        ex.RequestInformation.ExtendedErrorInformation != null &&
+                        ex.RequestInformation.ExtendedErrorInformation.ErrorCode == BlobErrorCodeStrings.BlobNotFound)
+                    {
+                        // Blob just didn't exist, so we're going to create it
+                        content = new StringBuilder();
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
+
+                // Build the new content
+                string finalContent = content.Append(newContent.ToString()).ToString();
+
+                // Try to upload it
+                try
+                {
+                    await _logBlob.UploadTextAsync(
+                        finalContent, 
+                        Encoding.UTF8, 
+                        AccessCondition.GenerateIfMatchCondition(_logBlob.Properties.ETag), 
+                        new BlobRequestOptions(), 
+                        new OperationContext());
+                }
+                catch (StorageException ex)
+                {
+                    if (ex.RequestInformation.HttpStatusCode == 409)
+                    {
+                        // Conflict, just try again
+                        conflict = true;
+                        tries++;
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
+            }
+            
+            // Check if we succeeded
+            if (conflict)
+            {
+                // We failed!
+                InvocationEventSource.Log.FailedToUploadEvents(events.Count, tries);
+            }
+            else
+            {
+                // We succeeded!
+                InvocationEventSource.Log.UploadedEvents(events.Count, tries);
+            }
+            
+            // Bogus return value, we don't care :).
+            return Unit.Default;
+        }
+
+        public override Task<Uri> End()
         {
             // Disconnect the listener
             _eventSubscription.Dispose();
 
-            // Upload the file to blob storage
-            var logBlob = await Storage.Primary.Blobs.UploadBlob("application/json", _tempFile, WorkService.InvocationLogsContainerBaseName, "invocations/" + _blobName);
-
-            // Delete the temp files
-            File.Delete(_tempFile);
-
-            return logBlob.Uri;
+            return Task.FromResult(_logBlob.Uri);
         }
     }
 }

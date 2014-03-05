@@ -162,5 +162,23 @@ namespace NuGet.Services.Work.Monitoring
 
         [NonEvent]
         public void Extending(DateTimeOffset newTimeout) { Extending(InvocationContext.GetCurrentInvocationId(), newTimeout.ToString("O")); }
+
+        [Event(
+            eventId: 16,
+            Level = EventLevel.Informational,
+            Message = "Failed to upload {1} Invocation Log Entries for {0} after {2} tries.")]
+        private void FailedToUploadEvents(Guid invocationId, int events, int tries) { WriteEvent(16, invocationId, events, tries); }
+
+        [NonEvent]
+        public void FailedToUploadEvents(int events, int tries) { FailedToUploadEvents(InvocationContext.GetCurrentInvocationId(), events, tries); }
+
+        [Event(
+            eventId: 17,
+            Level = EventLevel.Informational,
+            Message = "Uploaded {1} Invocation Log Entries for {0} after {2} tries.")]
+        private void UploadedEvents(Guid invocationId, int events, int tries) { WriteEvent(17, invocationId, events, tries); }
+
+        [NonEvent]
+        public void UploadedEvents(int events, int tries) { UploadedEvents(InvocationContext.GetCurrentInvocationId(), events, tries); }
     }
 }
