@@ -210,22 +210,24 @@ namespace NuGet.Services.Work
                         QueuedAt = DateTime.UtcNow,
                         NextVisibleAt = DateTime.UtcNow + TimeSpan.FromMinutes(5)
                     });
-            var buffer = new ReplaySubject<EventEntry>();
-            var capture = new InvocationLogCapture(invocation);
-            capture.Subscribe(buffer.OnNext, buffer.OnError);
-            runner.Dispatch(invocation, capture, CancellationToken.None).ContinueWith(t =>
+            return Observable.Create<EventEntry>(observer =>
             {
-                if (t.IsFaulted)
+                var capture = new InvocationLogCapture(invocation);
+                capture.Subscribe(e => observer.OnNext(e), ex => observer.OnError(ex));
+                runner.Dispatch(invocation, capture, CancellationToken.None).ContinueWith(t =>
                 {
-                    buffer.OnError(t.Exception);
-                }
-                else
-                {
-                    buffer.OnCompleted();
-                }
-                return t;
+                    if (t.IsFaulted)
+                    {
+                        observer.OnError(t.Exception);
+                    }
+                    else
+                    {
+                        observer.OnCompleted();
+                    }
+                    return t;
+                });
+                return () => { }; // No action on unsubscribe
             });
-            return buffer;
         }
 
         protected override void ConfigureAttributeRouting(DefaultInlineConstraintResolver resolver)
