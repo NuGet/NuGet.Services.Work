@@ -59,8 +59,10 @@ namespace NuGet.Services.Work.Jobs
                     // Verify that the source database exists
                     if (!databases.Any(db => String.Equals(db.name, cstr.InitialCatalog, StringComparison.OrdinalIgnoreCase)))
                     {
-                        Log.SourceDatabaseNotFound(cstr.InitialCatalog);
-                        return Complete();
+                        throw new Exception(String.Format(
+                            CultureInfo.CurrentCulture,
+                            Strings.CreateOnlineDatabaseBackupJob_MissingSourceDatabase,
+                            cstr.InitialCatalog));
                     }
 
                     // Gather backups with matching prefix and order descending
