@@ -156,7 +156,10 @@ namespace NuGet.Services.Work.Jobs
             else
             {
                 parameters["TargetServer"] = TargetServer.ToString();
-                parameters["TargetDatabaseName"] = TargetDatabaseName.ToString();
+                if (!String.IsNullOrEmpty(TargetDatabaseName))
+                {
+                    parameters["TargetDatabaseName"] = TargetDatabaseName;
+                }
             }
             return Suspend(TimeSpan.FromMinutes(5), parameters);
         }
