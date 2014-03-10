@@ -139,7 +139,7 @@
     </Reference>
     <Reference Include="NuGet.Indexing, Version=3.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\packages\NuGet.Indexing.3.0.2-alpha-9\lib\net45\NuGet.Indexing.dll</HintPath>
+      <HintPath>..\..\packages\NuGet.Indexing.3.0.2-rel-2\lib\net45\NuGet.Indexing.dll</HintPath>
     </Reference>
     <Reference Include="NuGet.Services.Platform, Version=3.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
