@@ -141,9 +141,8 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\packages\NuGet.Indexing.3.0.2-rel-2\lib\net45\NuGet.Indexing.dll</HintPath>
     </Reference>
-    <Reference Include="NuGet.Services.Platform, Version=3.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\packages\NuGet.Services.Platform.3.0.1-rel-3\lib\net45\NuGet.Services.Platform.dll</HintPath>
+    <Reference Include="NuGet.Services.Platform">
+      <HintPath>..\..\packages\NuGet.Services.Platform.3.0.2-rel-4\lib\net45\NuGet.Services.Platform.dll</HintPath>
     </Reference>
     <Reference Include="NuGet.Services.Platform.Client, Version=3.0.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
