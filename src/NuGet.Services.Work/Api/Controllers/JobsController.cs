@@ -45,5 +45,27 @@ namespace NuGet.Services.Work.Api.Controllers
             var stats = await Queue.GetJobStatistics();
             return Content(HttpStatusCode.OK, stats.Select(s => s.ToJobModel()));
         }
+
+        [Route("{jobName}/invocations", Name = Routes.GetInvocationsByJob)]
+        public async Task<IHttpActionResult> GetByJob(string jobName, DateTime? start = null, DateTime? end = null, int? limit = null)
+        {
+            return Content(HttpStatusCode.OK, (await Queue.GetByJob(jobName, start, end, limit)).Select(i => i.ToModel(Url)));
+        }
+
+        [Route("{jobName}/latest", Name = Routes.GetLatestForJob)]
+        public async Task<IHttpActionResult> GetLatestByJob(string jobName)
+        {
+            return Content(HttpStatusCode.OK, (await Queue.GetLatestForJob(jobName)).ToModel(Url));
+        }
+
+        [Route("{jobName}/log", Name = Routes.GetLatestLogForJob)]
+        public async Task<IHttpActionResult> GetLatestLogByJob(string jobName)
+        {
+            var invocation = await Queue.GetLatestForJob(jobName);
+            if(invocation == null || String.IsNullOrEmpty(invocation.LogUrl)) {
+                return NotFound();
+            }
+            return await TransferBlob(invocation.LogUrl);
+        }
     }
 }

@@ -11,18 +11,13 @@ using NuGet.Services.Work.Models;
 
 namespace NuGet.Services.Work.Client
 {
-    public class InvocationsClient
+    public class InvocationsClient : ResourceClientBase
     {
-        private HttpClient _client;
-
-        public InvocationsClient(HttpClient client)
-        {
-            _client = client;
-        }
+        public InvocationsClient(HttpClient client) : base(client) {}
 
         public Task<ServiceResponse<Invocation>> Put(InvocationRequest request)
         {
-            return _client.PutAsync(
+            return Client.PutAsync(
                 "work/invocations",
                 new ObjectContent<InvocationRequest>(
                     request,
@@ -32,62 +27,65 @@ namespace NuGet.Services.Work.Client
 
         public Task<ServiceResponse> GetLog(string id)
         {
-            return _client.GetAsync(
+            return Client.GetAsync(
                 "work/invocations/" + id.ToLowerInvariant() + "/log")
                 .AsServiceResponse();
         }
 
+        public Task<ServiceResponse<IEnumerable<Invocation>>> GetByInstance(string jobInstanceName, DateTimeOffset? start, DateTimeOffset? end, int? limit)
+        {
+            return GetRange("work/invocations/instances/" + jobInstanceName, start, end, limit);
+        }
+
+        public Task<ServiceResponse<IEnumerable<Invocation>>> GetStatus()
+        {
+            return Get<IEnumerable<Invocation>>("work/invocations/status");
+        }
+
         public Task<ServiceResponse<IEnumerable<Invocation>>> Get(InvocationListCriteria criteria)
         {
-            return GetInvocations(criteria, String.Empty);
+            return GetInvocations(criteria, limit: null);
         }
 
         public Task<ServiceResponse<IEnumerable<Invocation>>> Get(InvocationListCriteria criteria, int limit)
         {
-            return GetInvocations(criteria, "?limit=" + limit.ToString());
+            return GetInvocations(criteria, limit);
         }
 
         public Task<ServiceResponse<IEnumerable<Invocation>>> GetPurgable(DateTimeOffset? before)
         {
-            string beforeValue = RenderBeforeQueryStringValue(before);
-            return _client.GetAsync(
-                "work/invocations/purgable" + beforeValue)
-                .AsServiceResponse<IEnumerable<Invocation>>();
+            return Get<IEnumerable<Invocation>>("work/invocations/purgable", new Dictionary<string, string>() {
+                {"before", before == null ? null : before.Value.ToString("O") }
+            });
         }
 
-        public Task<ServiceResponse<IEnumerable<Invocation>>> Purge(DateTimeOffset? before)
+        public async Task<ServiceResponse<IEnumerable<Invocation>>> Purge(DateTimeOffset? before)
         {
-            string beforeValue = RenderBeforeQueryStringValue(before);
-            return _client.DeleteAsync(
-                "work/invocations/purgable" + beforeValue)
+            return await Client.DeleteAsync(
+                await FormatQueryString(
+                    "work/invocations/purgable",
+                    new Dictionary<string,string>() {
+                        {"before", before == null ? null : before.Value.ToString("O")}
+                    }))
                 .AsServiceResponse<IEnumerable<Invocation>>();
         }
 
         public Task<ServiceResponse<Invocation>> Get(string id)
         {
-            return _client.GetAsync("work/invocations/" + id).AsServiceResponse<Invocation>();
+            return Get<Invocation>("work/invocations/" + id);
         }
 
         public Task<ServiceResponse<InvocationStatistics>> GetStatistics()
         {
-            return _client.GetAsync("work/invocations/stats").AsServiceResponse<InvocationStatistics>();
+            return Get<InvocationStatistics>("work/invocations/stats");
         }
 
-        private Task<ServiceResponse<IEnumerable<Invocation>>> GetInvocations(InvocationListCriteria criteria, string queryString)
+        private Task<ServiceResponse<IEnumerable<Invocation>>> GetInvocations(InvocationListCriteria criteria, int? limit)
         {
-            return _client.GetAsync(
-                "work/invocations/" + criteria.ToString().ToLowerInvariant() + queryString)
-                .AsServiceResponse<IEnumerable<Invocation>>();
-        }
-
-        private static string RenderBeforeQueryStringValue(DateTimeOffset? before)
-        {
-            string beforeValue = String.Empty;
-            if (before != null)
+            return Get<IEnumerable<Invocation>>("work/invocations/" + criteria.ToString().ToLowerInvariant(), new Dictionary<string, string>()
             {
-                beforeValue = "?before=" + WebUtility.UrlEncode(before.Value.ToString("O"));
-            }
-            return beforeValue;
+                {"limit", limit == null ? null : limit.Value.ToString()}
+            });
         }
     }
 }

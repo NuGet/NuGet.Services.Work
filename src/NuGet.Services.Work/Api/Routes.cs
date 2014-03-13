@@ -17,9 +17,15 @@ namespace NuGet.Services.Work.Api
         public const string GetInvocationLog = "Work-Invocations-GetLog";
         public const string GetInvocationLogByCriteria = "Work-Invocations-GetLogByCriteria";
         public const string PutInvocation = "Work-Invocations-Put";
+        public const string GetInvocationsByJobInstance = "Work-Invocations-GetInvocationsByJobInstance";
         public const string GetJobs = "Work-Jobs-GetAll";
         public const string GetInvocationStatistics = "Work-Invocations-GetStatistics";
         public const string GetWorkerStatistics = "Work-Worker-GetStatistics";
         public const string GetJobStatistics = "Work-Jobs-GetJobStatistics";
+        public const string GetInvocationsByJob = "Work-Jobs-GetInvocationsByJob";
+        public const string GetLatestForJob = "Work-Jobs-GetLatestForJob";
+        public const string GetLatestLogForJob = "Work-Jobs-GetLatestLogForJob";
+        public const string GetStatus = "Work-Invocations-GetStatus";
+        public const string GetStatusCheck = "Work-Invocations-GetStatusCheck";
     }
 }

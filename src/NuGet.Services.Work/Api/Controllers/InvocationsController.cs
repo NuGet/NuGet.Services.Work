@@ -49,7 +49,7 @@ namespace NuGet.Services.Work.Api.Controllers
         public async Task<IHttpActionResult> GetInvocationLog(Guid id)
         {
             var invocation = await Queue.Get(id);
-            if (String.IsNullOrEmpty(invocation.LogUrl))
+            if(invocation == null || String.IsNullOrEmpty(invocation.LogUrl))
             {
                 return NotFound();
             }
@@ -60,6 +60,28 @@ namespace NuGet.Services.Work.Api.Controllers
         public Task<IHttpActionResult> GetActive(int? limit = null)
         {
             return Get(InvocationListCriteria.Active, limit);
+        }
+
+        [Route("instances/{instanceName}", Name = Routes.GetInvocationsByJobInstance)]
+        public async Task<IHttpActionResult> GetByInstance(string instanceName, DateTime? start = null, DateTime? end = null, int? limit = null)
+        {
+            return Content(HttpStatusCode.OK, (await Queue.GetByInstance(instanceName, start, end, limit)).Select(i => i.ToModel(Url)));
+        }
+
+        [Route("status", Name = Routes.GetStatus)]
+        public async Task<IHttpActionResult> GetStatus()
+        {
+            return Content(HttpStatusCode.OK, (await Queue.GetLatestByJob()).Select(i => i.ToModel(Url)));
+        }
+
+        [Route("status/check", Name = Routes.GetStatusCheck)]
+        public async Task<IHttpActionResult> GetStatusCheck()
+        {
+            var data = (await Queue.GetLatestByJob()).Select(i => i.ToModel(Url)).ToList();
+            var status = data.Any(i => i.Result == ExecutionResult.Crashed || i.Result == ExecutionResult.Faulted) ?
+                HttpStatusCode.InternalServerError :
+                HttpStatusCode.OK;
+            return Content(status, data);
         }
 
         [Route("{criteria:invocationListCriteria}", Name = Routes.GetInvocations)]

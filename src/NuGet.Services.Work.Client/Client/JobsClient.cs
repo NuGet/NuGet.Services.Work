@@ -9,23 +9,33 @@ using NuGet.Services.Work.Models;
 
 namespace NuGet.Services.Work.Client
 {
-    public class JobsClient
+    public class JobsClient : ResourceClientBase
     {
-        private HttpClient _client;
-
-        public JobsClient(HttpClient client)
-        {
-            _client = client;
-        }
+        public JobsClient(HttpClient client) : base(client) { }
 
         public Task<ServiceResponse<IEnumerable<JobStatistics>>> GetStatistics()
         {
-            return _client.GetAsync("work/jobs/stats").AsServiceResponse<IEnumerable<JobStatistics>>();
+            return Get<IEnumerable<JobStatistics>>("work/jobs/stats");
         }
 
         public Task<ServiceResponse<IEnumerable<Job>>> Get()
         {
-            return _client.GetAsync("work/jobs").AsServiceResponse<IEnumerable<Job>>();
+            return Get<IEnumerable<Job>>("work/jobs");
+        }
+
+        public Task<ServiceResponse<IEnumerable<Invocation>>> GetByJob(string jobName, DateTimeOffset? start, DateTimeOffset? end, int? limit)
+        {
+            return GetRange("work/jobs/" + jobName + "/invocations", start, end, limit);
+        }
+
+        public Task<ServiceResponse<Invocation>> GetLatestInvocation(string jobName)
+        {
+            return Get<Invocation>("work/jobs/" + jobName + "/latest");
+        }
+
+        public Task<ServiceResponse> GetLatestInvocationLog(string jobName)
+        {
+            return Client.GetAsync("work/jobs/" + jobName + "/log").AsServiceResponse();
         }
     }
 }
