@@ -344,6 +344,59 @@ namespace NuGet.Services.Work
                 });
         }
 
+        public virtual Task<IEnumerable<InvocationState>> GetByJob(string jobName, DateTime? start, DateTime? end, int? limit)
+        {
+            var limitStr = "";
+            if(limit != null) 
+            {
+                limitStr = "TOP (" + limit.Value.ToString() + ") ";
+            }
+            return ConnectAndQuery(@"
+                SELECT " + limitStr + @"*
+                FROM [work].Invocations
+                WHERE [Job] = @jobName
+                AND (@start IS NULL OR [UpdatedAt] >= @start)
+                AND (@end IS NULL OR [UpdatedAt] <= @end)
+                ORDER BY UpdatedAt DESC", new { jobName, start, end });
+        }
+
+        public virtual Task<IEnumerable<InvocationState>> GetByInstance(string instanceName, DateTime? start, DateTime? end, int? limit)
+        {
+            var limitStr = "";
+            if (limit != null)
+            {
+                limitStr = "TOP (" + limit.Value.ToString() + ") ";
+            }
+            return ConnectAndQuery(@"
+                SELECT " + limitStr + @"*
+                FROM [work].Invocations
+                WHERE [JobInstanceName] = @instanceName
+                AND (@start IS NULL OR [LastUpdated] >= @start)
+                AND (@end IS NULL OR [LastUpdated] <= @end)
+                ORDER BY UpdatedAt DESC", new { jobName = instanceName, start, end });
+        }
+
+        public virtual Task<IEnumerable<InvocationState>> GetLatestByJob()
+        {
+            return ConnectAndQuery(@"
+                WITH cte AS (
+                    SELECT *, ROW_NUMBER() OVER (PARTITION BY Job ORDER BY [UpdatedAt] DESC) AS rn
+	                FROM [work].Invocations
+                )
+                SELECT *
+                FROM cte
+                WHERE rn = 1");
+        }
+
+        public virtual Task<InvocationState> GetLatestForJob(string jobName)
+        {
+            return ConnectAndQuerySingle(@"
+                SELECT TOP(1) *
+                FROM [work].Invocations
+                WHERE Job = @jobName
+                ORDER BY [UpdatedAt] DESC", new { jobName });
+        }
+
         public Task<IEnumerable<InvocationState>> PurgeCompleted()
         {
             return PurgeCompleted(DateTimeOffset.UtcNow);

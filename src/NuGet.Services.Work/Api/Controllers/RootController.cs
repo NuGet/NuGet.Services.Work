@@ -40,7 +40,10 @@ namespace NuGet.Services.Work.Api.Controllers
                                 .ToDictionary(t => t.Item1, t => t.Item2),
                             Put = Url.RouteUri(Routes.PutInvocation),
                             Delete = Url.RouteUri(Routes.DeleteSingleInvocation, new { id = "{id}" }),
-                            Stats = Url.RouteUri(Routes.GetInvocationStatistics)
+                            Stats = Url.RouteUri(Routes.GetInvocationStatistics),
+                            ByInstance = Url.RouteUri(Routes.GetInvocationsByJobInstance, new { instanceName = "{instanceName}" }),
+                            Status = Url.RouteUri(Routes.GetStatus),
+                            StatusCheck = Url.RouteUri(Routes.GetStatusCheck)
                         },
                         Workers = new
                         {
@@ -49,7 +52,10 @@ namespace NuGet.Services.Work.Api.Controllers
                         Jobs = new
                         {
                             All = Url.RouteUri(Routes.GetJobs),
-                            Stats = Url.RouteUri(Routes.GetJobStatistics)
+                            Stats = Url.RouteUri(Routes.GetJobStatistics),
+                            Invocations = Url.RouteUri(Routes.GetInvocationsByJob, new { jobName = "{jobName}" }),
+                            LatestInvocation = Url.RouteUri(Routes.GetLatestForJob, new { jobName = "{jobName}" }),
+                            LatestLog = Url.RouteUri(Routes.GetLatestLogForJob, new { jobName = "{jobName}" }),
                         }
                     }
                 });
