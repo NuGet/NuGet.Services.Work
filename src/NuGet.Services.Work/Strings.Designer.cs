@@ -70,6 +70,15 @@ namespace NuGet.Services.Work {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Unknown warehouse report: &apos;{0}&apos;.
+        /// </summary>
+        internal static string CreateWarehouseReportsJob_UnknownReport {
+            get {
+                return ResourceManager.GetString("CreateWarehouseReportsJob_UnknownReport", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to The Event Source &apos;{0}&apos; does not have a public static field &quot;Log&quot; containing an instance of it. Event Sources must implement this pattern for all jobs..
         /// </summary>
         internal static string EventSourceInstanceManager_EventSourceDoesNotHaveLogField {

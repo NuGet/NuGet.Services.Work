@@ -16,6 +16,7 @@ using NuGet.Services.Client;
 using System.Diagnostics;
 using System.IO;
 using Newtonsoft.Json.Linq;
+using Newtonsoft.Json;
 
 namespace NuGet.Services.Work.Jobs
 {
@@ -28,13 +29,14 @@ namespace NuGet.Services.Work.Jobs
         private const string RecentPopularityDetail = "recentpopularitydetail";
         private const string PackageReportDetailBaseName = "recentpopularitydetail_";
 
-        private List<Func<Task>> _globalReportBuilders;
+        private Dictionary<string, Func<Task>> _globalReportBuilders;
 
         public bool RebuildAll { get; set; }
         public SqlConnectionStringBuilder WarehouseConnection { get; set; }
         public CloudStorageAccount Destination { get; set; }
         public string DestinationContainerName { get; set; }
         public string OutputDirectory { get; set; }
+        public string ReportName { get; set; }
 
         protected ConfigurationHub Config { get; set; }
         protected CloudBlobContainer DestinationContainer { get; set; }
@@ -44,11 +46,11 @@ namespace NuGet.Services.Work.Jobs
         {
             Config = config;
 
-            _globalReportBuilders = new List<Func<Task>>() {
-                () => CreateReport(NuGetClientVersion, "NuGet.Services.Work.Jobs.Scripts.DownloadReport_NuGetClientVersion.sql"),
-                () => CreateReport(Last6Months, "NuGet.Services.Work.Jobs.Scripts.DownloadReport_Last6Months.sql"),
-                () => CreateReport(RecentPopularity, "NuGet.Services.Work.Jobs.Scripts.DownloadReport_RecentPopularity.sql"),
-                () => CreateReport(RecentPopularityDetail, "NuGet.Services.Work.Jobs.Scripts.DownloadReport_RecentPopularityDetail.sql")
+            _globalReportBuilders = new Dictionary<string, Func<Task>>(StringComparer.OrdinalIgnoreCase) {
+                { NuGetClientVersion, () => CreateReport(NuGetClientVersion, "NuGet.Services.Work.Jobs.Scripts.DownloadReport_NuGetClientVersion.sql") },
+                { Last6Months, () => CreateReport(Last6Months, "NuGet.Services.Work.Jobs.Scripts.DownloadReport_Last6Months.sql") },
+                { RecentPopularity, () => CreateReport(RecentPopularity, "NuGet.Services.Work.Jobs.Scripts.DownloadReport_RecentPopularity.sql") },
+                { RecentPopularityDetail, () => CreateReport(RecentPopularityDetail, "NuGet.Services.Work.Jobs.Scripts.DownloadReport_RecentPopularityDetail.sql") },
             };
         }
 
@@ -69,19 +71,36 @@ namespace NuGet.Services.Work.Jobs
                 throw new InvalidOperationException(Strings.WarehouseJob_NoDestinationAvailable);
             }
 
-            foreach (var reportBuilder in _globalReportBuilders)
+            if (String.IsNullOrEmpty(ReportName))
             {
-                await reportBuilder();
-            }
+                // Generate all reports
+                foreach (var reportBuilder in _globalReportBuilders.Values)
+                {
+                    await reportBuilder();
+                }
 
-            if (RebuildAll)
-            {
-                await RebuildPackageReports(all: true);
+                if (RebuildAll)
+                {
+                    await RebuildPackageReports(all: true);
+                }
+                else
+                {
+                    await RebuildPackageReports(all: false);
+                    await CleanInactivePackageReports();
+                }
             }
             else
             {
-                await RebuildPackageReports(all: false);
-                await CleanInactivePackageReports();
+                // Just generate that report
+                Func<Task> generator;
+                if (_globalReportBuilders.TryGetValue(ReportName, out generator))
+                {
+                    await generator();
+                }
+                else
+                {
+                    throw new InvalidOperationException(String.Format(Strings.CreateWarehouseReportsJob_UnknownReport, ReportName));
+                }
             }
 
             if (!String.IsNullOrEmpty(OutputDirectory))
@@ -208,7 +227,7 @@ namespace NuGet.Services.Work.Jobs
 
         private Task CreateReport(string reportName, string scriptName, params Tuple<string, int, string>[] parameters)
         {
-            return CreateReport(reportName, scriptName, table => JsonFormat.Serialize(table, camelCase: false), parameters);
+            return CreateReport(reportName, scriptName, table => JsonConvert.SerializeObject(table, Formatting.Indented), parameters);
         }
 
         private async Task CreateReport(string reportName, string scriptName, Func<DataTable, string> jsonSerializer, params Tuple<string, int, string>[] parameters)
