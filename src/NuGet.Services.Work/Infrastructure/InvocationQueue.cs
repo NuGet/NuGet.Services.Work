@@ -371,9 +371,9 @@ namespace NuGet.Services.Work
                 SELECT " + limitStr + @"*
                 FROM [work].Invocations
                 WHERE [JobInstanceName] = @instanceName
-                AND (@start IS NULL OR [LastUpdated] >= @start)
-                AND (@end IS NULL OR [LastUpdated] <= @end)
-                ORDER BY UpdatedAt DESC", new { jobName = instanceName, start, end });
+                AND (@start IS NULL OR [UpdatedAt] >= @start)
+                AND (@end IS NULL OR [UpdatedAt] <= @end)
+                ORDER BY UpdatedAt DESC", new { instanceName, start, end });
         }
 
         public virtual Task<IEnumerable<InvocationState>> GetLatestByJob()
