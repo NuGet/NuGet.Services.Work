@@ -250,6 +250,7 @@
     <Compile Include="Jobs\PurgeCompletedInvocationsJob.cs" />
     <Compile Include="Jobs\PurgePackageStatisticsJob.cs" />
     <Compile Include="Jobs\RebuildSearchIndexJob.cs" />
+    <Compile Include="Jobs\RenameLatestBackupDatabaseJob.cs" />
     <Compile Include="Jobs\ReplicatePackageStatisticsJob.cs" />
     <Compile Include="Jobs\SyncPackagesFromBackupJob.cs" />
     <Compile Include="Jobs\TestAsyncJob.cs" />
