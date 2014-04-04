@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Data.SqlClient;
 using System.Diagnostics.Tracing;
 using System.Linq;
@@ -16,21 +17,9 @@ using NuGet.Services.Work.Monitoring;
 
 namespace NuGet.Services.Work.Jobs
 {
+    [Description("Calculates the unique and total package counts and gets the total download count from SQL")]
     public class CalculateStatsTotalsJob : JobHandler<CaclculateStatsTotalsEventSource>
     {
-        /// <summary>
-        /// Gets or sets an Azure Storage account with the container for the content blobs
-        /// </summary>
-        public CloudStorageAccount ContentAccount { get; set; }
-
-        public string ContentContainerName { get; set; }
-        public CloudBlobContainer ContentContainer { get; set; }
-
-        /// <summary>
-        /// Gets or set a connection string to the database containing package data.
-        /// </summary>
-        public SqlConnectionStringBuilder PackageDatabase { get; set; }
-
         protected StorageHub Storage { get; set; }
         protected ConfigurationHub Config { get; set; }
 
@@ -49,13 +38,15 @@ namespace NuGet.Services.Work.Jobs
 
         protected internal override async Task Execute()
         {
-            ContentAccount = ContentAccount ?? Storage.Legacy.Account;
-            ContentContainerName = String.IsNullOrEmpty(ContentContainerName) ? "content" : ContentContainerName;
-            ContentContainer = ContentAccount.CreateCloudBlobClient().GetContainerReference(ContentContainerName);
-            
+            var contentAccount = Storage.Legacy.Account;
+            var contentContainerName = "content";
+            var contentContainer = contentAccount.CreateCloudBlobClient().GetContainerReference(contentContainerName);
+
+            var packageDatabase = Config.Sql.Legacy;
+
             Totals totals;
-            Log.BeginningQuery(PackageDatabase.DataSource, PackageDatabase.InitialCatalog);
-            using (var connection = await PackageDatabase.ConnectTo())
+            Log.BeginningQuery(packageDatabase.DataSource, packageDatabase.InitialCatalog);
+            using (var connection = await packageDatabase.ConnectTo())
             {
                 totals = (await connection.QueryAsync<Totals>(GetStatisticsSql)).SingleOrDefault();
             }
@@ -65,11 +56,11 @@ namespace NuGet.Services.Work.Jobs
                 throw new Exception(Strings.CalculateStatsTotalsJob_NoData);
             }
 
-            Log.FinishedQuery(totals.UniquePackages, totals.TotalPackages, totals.DownloadCount);
+            Log.FinishedQuery(totals.UniquePackages, totals.TotalPackages, totals.DownloadCount, totals.LastUpdateDateUtc);
 
             string name = "stats-totals.json";
             Log.BeginningBlobUpload(name);
-            await Storage.Primary.Blobs.UploadJsonBlob(totals, ContentContainerName, name);
+            await Storage.Legacy.Blobs.UploadJsonBlob(totals, contentContainerName, name);
             Log.FinishedBlobUpload();
         }
 
@@ -100,12 +91,12 @@ namespace NuGet.Services.Work.Jobs
         [Event(
             eventId: 2,
             Level = EventLevel.Informational,
-            Message = "Finished querying the database. Unique Packages: {0}, Total Packages: {1}, Download Count: {2}",
+            Message = "Finished querying the database. Unique Packages: {0}, Total Packages: {1}, Download Count: {2}, Last Updated Date UTC: {3}",
             Task = Tasks.Querying,
             Opcode = EventOpcode.Stop)]
-        public void FinishedQuery(int uniquePackages, int totalPackages, int downloadCount)
+        public void FinishedQuery(int uniquePackages, int totalPackages, int downloadCount, DateTime lastUpdatedUtc)
         {
-            WriteEvent(2, uniquePackages, totalPackages, downloadCount);
+            WriteEvent(2, uniquePackages, totalPackages, downloadCount, lastUpdatedUtc);
         }
 
         [Event(
