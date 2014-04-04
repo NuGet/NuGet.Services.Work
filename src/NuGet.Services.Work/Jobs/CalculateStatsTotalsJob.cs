@@ -28,7 +28,7 @@ namespace NuGet.Services.Work.Jobs
                     (SELECT COUNT([Key]) FROM PackageRegistrations pr WITH (NOLOCK)
                             WHERE EXISTS (SELECT 1 FROM Packages p WITH (NOLOCK) WHERE p.PackageRegistrationKey = pr.[Key] AND p.Listed = 1)) AS UniquePackages,
                     (SELECT COUNT([Key]) FROM Packages WITH (NOLOCK) WHERE Listed = 1) AS TotalPackages,
-                    (SELECT TotalDownloadCount FROM GallerySettings WITH (NOLOCK)) AS DownloadCount";
+                    (SELECT TotalDownloadCount FROM GallerySettings WITH (NOLOCK)) AS Downloads";
 
         public CalculateStatsTotalsJob(StorageHub storage, ConfigurationHub config)
         {
@@ -56,7 +56,7 @@ namespace NuGet.Services.Work.Jobs
                 throw new Exception(Strings.CalculateStatsTotalsJob_NoData);
             }
 
-            Log.FinishedQuery(totals.UniquePackages, totals.TotalPackages, totals.DownloadCount, totals.LastUpdateDateUtc);
+            Log.FinishedQuery(totals.UniquePackages, totals.TotalPackages, totals.Downloads, totals.LastUpdateDateUtc);
 
             string name = "stats-totals.json";
             Log.BeginningBlobUpload(name);
@@ -68,7 +68,7 @@ namespace NuGet.Services.Work.Jobs
         {
             public int UniquePackages { get; set; }
             public int TotalPackages { get; set; }
-            public int DownloadCount { get; set; }
+            public int Downloads { get; set; }
 
             public DateTime LastUpdateDateUtc { get { return DateTime.UtcNow; } }
         }
