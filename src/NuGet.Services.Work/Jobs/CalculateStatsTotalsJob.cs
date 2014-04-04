@@ -5,10 +5,12 @@ using System.Diagnostics.Tracing;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Dapper;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
 using NuGet.Indexing;
 using NuGet.Services.Configuration;
+using NuGet.Services.Storage;
 using NuGet.Services.Work.Jobs.Bases;
 using NuGet.Services.Work.Monitoring;
 
@@ -20,7 +22,9 @@ namespace NuGet.Services.Work.Jobs
         /// Gets or sets an Azure Storage account with the container for the content blobs
         /// </summary>
         public CloudStorageAccount ContentAccount { get; set; }
-        public string ContentContainer { get; set; }
+
+        public string ContentContainerName { get; set; }
+        public CloudBlobContainer ContentContainer { get; set; }
 
         /// <summary>
         /// Gets or set a connection string to the database containing package data.
@@ -31,7 +35,7 @@ namespace NuGet.Services.Work.Jobs
         protected ConfigurationHub Config { get; set; }
 
         // Note the NOLOCK hints here!
-        public static readonly string GetStatisticsSql = @"SELECT 
+        private static readonly string GetStatisticsSql = @"SELECT 
                     (SELECT COUNT([Key]) FROM PackageRegistrations pr WITH (NOLOCK)
                             WHERE EXISTS (SELECT 1 FROM Packages p WITH (NOLOCK) WHERE p.PackageRegistrationKey = pr.[Key] AND p.Listed = 1)) AS UniquePackages,
                     (SELECT COUNT([Key]) FROM Packages WITH (NOLOCK) WHERE Listed = 1) AS TotalPackages,
@@ -45,10 +49,9 @@ namespace NuGet.Services.Work.Jobs
 
         protected internal override async Task Execute()
         {
-            Log.BeginningQuery();
             ContentAccount = ContentAccount ?? Storage.Legacy.Account;
-            ContentContainer = Source.CreateCloudBlobClient().GetContainerReference(
-                Strings.IsNullOrEmpty(ContentContainer)) ? "content" : ContentContainer);
+            ContentContainerName = String.IsNullOrEmpty(ContentContainerName) ? "content" : ContentContainerName;
+            ContentContainer = ContentAccount.CreateCloudBlobClient().GetContainerReference(ContentContainerName);
             
             Totals totals;
             Log.BeginningQuery(PackageDatabase.DataSource, PackageDatabase.InitialCatalog);
@@ -56,11 +59,17 @@ namespace NuGet.Services.Work.Jobs
             {
                 totals = (await connection.QueryAsync<Totals>(GetStatisticsSql)).SingleOrDefault();
             }
-            Log.FinishedQuery(totals.UniquePackages, totals.TotalPackages, totals.DownloadCount)
+
+            if (totals == null)
+            {
+                throw new Exception(Strings.CalculateStatsTotalsJob_NoData);
+            }
+
+            Log.FinishedQuery(totals.UniquePackages, totals.TotalPackages, totals.DownloadCount);
 
             string name = "stats-totals.json";
             Log.BeginningBlobUpload(name);
-            await Storage.Primary.Blobs.UploadJsonBlob(totals, ContentContainer, name);
+            await Storage.Primary.Blobs.UploadJsonBlob(totals, ContentContainerName, name);
             Log.FinishedBlobUpload();
         }
 
@@ -69,6 +78,8 @@ namespace NuGet.Services.Work.Jobs
             public int UniquePackages { get; set; }
             public int TotalPackages { get; set; }
             public int DownloadCount { get; set; }
+
+            public DateTime LastUpdateDateUtc { get { return DateTime.UtcNow; } }
         }
     }
 
