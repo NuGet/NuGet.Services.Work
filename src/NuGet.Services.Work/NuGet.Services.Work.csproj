@@ -237,6 +237,7 @@
     <Compile Include="Jobs\AggregateStatisticsJob.cs" />
     <Compile Include="Jobs\BackupPackageBlobsJob.cs" />
     <Compile Include="Jobs\Bases\SearchIndexJobHandlerBase.cs" />
+    <Compile Include="Jobs\CalculateStatsTotalsJob.cs" />
     <Compile Include="Jobs\CleanOnlineDatabaseBackupsJob.cs" />
     <Compile Include="Jobs\Bases\DatabaseJobHandlerBase.cs" />
     <Compile Include="Jobs\CreateWarehouseReportsJob.cs" />
