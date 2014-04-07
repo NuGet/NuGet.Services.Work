@@ -136,8 +136,8 @@ namespace NuGet.Services.Work.Jobs
         {
             int total = 0;
 
-            bool hasWork;
             int lastKey = -1;
+            List<DownloadFact> batch;
             do
             {
                 Log.GettingLastReplicatedKey(Destination.DataSource, Destination.InitialCatalog);
@@ -151,27 +151,19 @@ namespace NuGet.Services.Work.Jobs
                 lastKey = originalKey;
 
                 Log.FetchingStatisticsChunk(Source.DataSource, Source.InitialCatalog, batchSize);
-                var batch = await GetDownloadRecords(originalKey, batchSize);
+                batch = await GetDownloadRecords(originalKey, batchSize);
                 Log.FetchedStatisticsChunk(Source.DataSource, Source.InitialCatalog, batch.Count);
                 
-                if (batch.Count > 0)
+                Log.SavingDownloadFacts(Destination.InitialCatalog, Destination.DataSource, batch.Count);
+                if (!WhatIf)
                 {
-                    hasWork = true;
-                    Log.SavingDownloadFacts(Destination.InitialCatalog, Destination.DataSource, batch.Count);
-                    if (!WhatIf)
-                    {
-                        await PutDownloadRecords(batch);
-                    }
-                    Log.SavedDownloadFacts(Destination.InitialCatalog, Destination.DataSource, batch.Count);
+                    await PutDownloadRecords(batch);
+                }
+                Log.SavedDownloadFacts(Destination.InitialCatalog, Destination.DataSource, batch.Count);
 
-                    total += batch.Count;
-                }
-                else
-                {
-                    hasWork = false;
-                }
+                total += batch.Count;
             }
-            while (hasWork);
+            while (batch.Count == batchSize);
 
             return total;
         }

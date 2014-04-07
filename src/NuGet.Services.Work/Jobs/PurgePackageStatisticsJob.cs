@@ -53,37 +53,56 @@ namespace NuGet.Services.Work.Jobs
 
         private async Task<int> DeletePackageStatistics(int warehouseHighWatermark)
         {
+            var windowEnd = DateTime.UtcNow.AddDays(-7);
+
             using (var connection = await Source.ConnectTo())
             {
-                int iterations = 0;
                 int total = 0;
-                int rows;
+                StatisticsPurgeResult result;
                 do
                 {
                     Log.PurgingStatisticsBatch(Source.DataSource, Source.InitialCatalog, Destination.DataSource, Destination.InitialCatalog, BatchSize.Value);
                     if (WhatIf)
                     {
-                        rows = 0;
+                        result = null;
                     }
                     else
                     {
-                        rows = (await connection.QueryAsync<int>(@"
+                        result = (await connection.QueryAsync<StatisticsPurgeResult>(@"
+                            DECLARE @t AS TABLE(
+		                        [Key] int PRIMARY KEY
+	                        )
+
                             DELETE TOP(@BatchSize) [PackageStatistics]
+                                OUTPUT deleted.[Key] INTO @t
                             WHERE [Key] <= @OriginalKey
                             AND [Key] <= (SELECT DownloadStatsLastAggregatedId FROM GallerySettings)
-                            AND [TimeStamp] < DATEADD(day, -7, GETDATE())
+                            AND [TimeStamp] < @windowEnd
+
+                            SELECT MIN([Key]) AS OldestKeyDeleted, MAX([Key]) AS NewestKeyDeleted, COUNT(1) AS DeletedCount FROM @t
                         ", new
                              {
                                  OriginalKey = warehouseHighWatermark,
-                                 BatchSize = BatchSize.Value
+                                 BatchSize = BatchSize.Value,
+                                 windowEnd
                              })).SingleOrDefault();
                     }
-                    Log.PurgedStatisticsBatch(Source.DataSource, Source.InitialCatalog, Destination.DataSource, Destination.InitialCatalog, rows);
-                    total += rows;
+
+                    await ExtendIfLessThan(TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(5));
+
+                    Log.PurgedStatisticsBatch(Source.DataSource, Source.InitialCatalog, Destination.DataSource, Destination.InitialCatalog, result.DeletedCount, result.OldestKeyDeleted, result.NewestKeyDeleted);
+                    total += result.DeletedCount;
                 }
-                while (rows > 0 && iterations++ < 10);
+                while (result != null && result.DeletedCount > 0);
                 return total;
             }
+        }
+
+        public class StatisticsPurgeResult
+        {
+            public int OldestKeyDeleted { get; set; }
+            public int NewestKeyDeleted { get; set; }
+            public int DeletedCount { get; set; }
         }
     }
 
@@ -122,8 +141,8 @@ namespace NuGet.Services.Work.Jobs
             Task = Tasks.PurgingStatisticsBatch,
             Opcode = EventOpcode.Stop,
             Level = EventLevel.Informational,
-            Message = "Purged batch of {4} statistics in {0}/{1} that have been synced to {2}/{3}")]
-        public void PurgedStatisticsBatch(string sourceServer, string sourceDatabase, string destServer, string destDatabase, int count) { WriteEvent(4, sourceServer, sourceDatabase, destServer, destDatabase, count); }
+            Message = "Purged batch of {4} statistics (from {5} to {6}) in {0}/{1} that have been synced to {2}/{3}")]
+        public void PurgedStatisticsBatch(string sourceServer, string sourceDatabase, string destServer, string destDatabase, int count, int oldest, int newest) { WriteEvent(4, sourceServer, sourceDatabase, destServer, destDatabase, count, oldest, newest); }
 
         [Event(
             eventId: 5,

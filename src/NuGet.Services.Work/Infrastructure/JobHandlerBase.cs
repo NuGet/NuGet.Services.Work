@@ -88,6 +88,21 @@ namespace NuGet.Services.Work
             return Context.Queue.Extend(Invocation, duration);
         }
 
+        /// <summary>
+        /// Extends this invocation's lease if there is less than [threshold] remaining in it.
+        /// </summary>
+        /// <param name="threshold">The threshold under which to extend the lease</param>
+        /// <param name="extendBy">The amount to extend the lease by</param>
+        /// <returns></returns>
+        protected virtual Task<bool> ExtendIfLessThan(TimeSpan threshold, TimeSpan extendBy)
+        {
+            if ((Invocation.NextVisibleAt - DateTime.UtcNow) < threshold)
+            {
+                return Extend(extendBy);
+            }
+            return Task.FromResult(true);
+        }
+
         protected virtual InvocationResult BindContext(InvocationContext context)
         {
             // Bind invocation information
