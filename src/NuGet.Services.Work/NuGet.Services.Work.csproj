@@ -240,6 +240,7 @@
     <Compile Include="Jobs\CalculateStatsTotalsJob.cs" />
     <Compile Include="Jobs\CleanOnlineDatabaseBackupsJob.cs" />
     <Compile Include="Jobs\Bases\DatabaseJobHandlerBase.cs" />
+    <Compile Include="Jobs\MaintainDatabaseIndexesJob.cs" />
     <Compile Include="Jobs\CreateWarehouseReportsJob.cs" />
     <Compile Include="Jobs\ExportDatabaseJob.cs" />
     <Compile Include="Jobs\GenerateSearchRankingsJob.cs" />
