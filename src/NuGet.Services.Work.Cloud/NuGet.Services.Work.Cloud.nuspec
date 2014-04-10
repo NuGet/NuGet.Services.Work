@@ -1,16 +1,21 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
-    <metadata>
-        <id>NuGet.Services.Work.Cloud</id>
-        <version>0.0.1</version>
-        <title>NuGet Work Service</title>
-        <authors>NuGet Team</authors>
-        <owners>Outercurve Foundation</owners>
-        <requireLicenseAcceptance>false</requireLicenseAcceptance>
-        <description>Deployment Package for the NuGet Work Service</description>
-    </metadata>
-    <files>
-        <file src="bin\$configuration$\app.publish\NuGet.Services.Work.Cloud.cspkg" />
-        <file src="bin\$configuration$\app.publish\ServiceConfiguration.Cloud.cscfg" />
-    </files>
+﻿<?xml version="1.0"?>
+<package >
+  <metadata>
+    <id>NuGet.Services.Search.Work</id>
+    <version>0.0.0</version>
+    <authors>Outercurve Foundation</authors>
+    <owners>Outercurve Foundation</owners>
+    <licenseUrl>https://github.com/NuGet/NuGet.Services.Work/blob/master/LICENSE</licenseUrl>
+    <projectUrl>https://github.com/NuGet/NuGet.Services.Work</projectUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>Deployment package for the NuGet Work Service.</description>
+    <releaseNotes>
+      Built by $BuildUser$ on $BuildMachine$ at $BuildDateUtc$ from $Commit$ on branch '$Branch$'.
+    </releaseNotes>
+  </metadata>
+  <files>
+    <file src="DeployToAzure.ps1" />
+    <file src="bin\$configuration$\app.publish\NuGet.Services.Work.Cloud.cspkg" />
+    <file src="bin\$configuration$\app.publish\ServiceConfiguration.Cloud.cscfg" />
+  </files>
 </package>

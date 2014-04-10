@@ -86,8 +86,6 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="LocalDb.publish.xml" />
-    <None Include="NuGet.Services.Work.Database.nuspec" />
-    <None Include="Deploy.ps1" />
   </ItemGroup>
   <ItemGroup>
     <Build Include="Stored Procedures\work.ExtendInvocation.sql" />
