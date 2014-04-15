@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Autofac;
+using NuGet.Services.Hosting;
 using NuGet.Services.ServiceModel;
 
 namespace NuGet.Services.Work
@@ -26,18 +27,23 @@ namespace NuGet.Services.Work
         public static async Task<WorkService> Create(IDictionary<string, string> configuration)
         {
             var host = new LocalServiceHost(
-                new ServiceHostInstanceName(
-                    new ServiceHostName(
-                        new DatacenterName(
-                            new EnvironmentName(
-                                "nuget",
-                                "local"),
+                new NuGetStartOptions()
+                {
+                    AppDescription = new ServiceHostDescription(
+                        new ServiceHostInstanceName(
+                            new ServiceHostName(
+                                new DatacenterName(
+                                    new EnvironmentName(
+                                        "nuget",
+                                        "local"),
+                                    0),
+                                "work"),
                             0),
-                        "work"),
-                    0),
-                configuration);
+                        Environment.MachineName),
+                    Configuration = configuration,
+                    Services = new [] { "Work" }
+                });
             var name = new ServiceName(host.Description.InstanceName, ServiceDefinition.FromType<WorkService>().Name);
-            host.LocalServices.Add(ServiceDefinition.FromType<LocalWorkService>());
             host.Initialize();
             if (!await host.Start())
             {
