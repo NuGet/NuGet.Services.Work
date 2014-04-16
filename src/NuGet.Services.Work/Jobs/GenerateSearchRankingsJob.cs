@@ -18,43 +18,35 @@ using NuGet.Services.Work.Jobs.Models;
 
 namespace NuGet.Services.Work.Jobs
 {
-    public class GenerateSearchRankingsJob : JobHandler<GenerateSearchRankingsEventSource>
+    public class GenerateSearchRankingsJob : ReportGeneratingJobBase<GenerateSearchRankingsEventSource>
     {
+        public static readonly int DefaultRankingCount = 250;
         public static readonly string DefaultContainerName = "ng-search";
         public static readonly string ReportName = "data/rankings.v1.json";
 
         public SqlConnectionStringBuilder WarehouseConnection { get; set; }
-        public CloudStorageAccount Destination { get; set; }
-        public string DestinationContainerName { get; set; }
-        public string OutputDirectory { get; set; }
+        public int? RankingCount { get; set; }
 
-        protected ConfigurationHub Config { get; set; }
-        protected CloudBlobContainer DestinationContainer { get; set; }
+        public GenerateSearchRankingsJob(ConfigurationHub config) : base(config, DefaultContainerName) {}
 
-        public GenerateSearchRankingsJob(ConfigurationHub config)
-        {
-            Config = config;
-        }
-
-        protected internal override async Task Execute()
+        protected override async Task ExecuteCore()
         {
             LoadDefaults();
+
+            RankingCount = RankingCount ?? DefaultRankingCount;
 
             // Extend the job lease to 30 minutes, since this job only runs daily
             await Extend(TimeSpan.FromMinutes(30));
 
-            if (!String.IsNullOrEmpty(OutputDirectory))
+            string destination = String.IsNullOrEmpty(OutputDirectory) ?
+                (Destination.Credentials.AccountName + "/" + DestinationContainer.Name) :
+                OutputDirectory;
+            if (String.IsNullOrEmpty(destination))
             {
-                Log.GeneratingSearchRankingReport(WarehouseConnection.DataSource, WarehouseConnection.InitialCatalog, OutputDirectory);
+                throw new Exception(Strings.WarehouseJob_NoDestinationAvailable);
             }
-            else if (Destination != null)
-            {
-                Log.GeneratingSearchRankingReport(WarehouseConnection.DataSource, WarehouseConnection.InitialCatalog, (Destination.Credentials.AccountName + "/" + DestinationContainer.Name));
-            }
-            else
-            {
-                throw new InvalidOperationException(Strings.WarehouseJob_NoDestinationAvailable);
-            }
+
+            Log.GeneratingSearchRankingReport(WarehouseConnection.DataSource, WarehouseConnection.InitialCatalog, destination);
 
             // Gather overall rankings
             JObject report = new JObject();
@@ -82,61 +74,13 @@ namespace NuGet.Services.Work.Jobs
             Log.GatheredProjectTypeRankings(count);
 
             // Write the JSON blob
-            if (!String.IsNullOrEmpty(OutputDirectory))
-            {
-                await WriteToFile(report);
-            }
-            else
-            {
-                await DestinationContainer.CreateIfNotExistsAsync();
-                await WriteToBlob(report);
-            }
+            await WriteReport(report, ReportName, Log.WritingReportBlob, Log.WroteReportBlob, Formatting.Indented);
         }
 
-        private async Task WriteToFile(JObject report)
+        protected override void LoadDefaults()
         {
-            string fullPath = Path.Combine(OutputDirectory, ReportName);
-            string parentDir = Path.GetDirectoryName(fullPath);
-            Log.WritingReportBlob(fullPath);
-            if (!WhatIf)
-            {
-                if (!Directory.Exists(parentDir))
-                {
-                    Directory.CreateDirectory(parentDir);
-                }
-                if (File.Exists(fullPath))
-                {
-                    File.Delete(fullPath);
-                }
-                using (var writer = new StreamWriter(File.OpenWrite(fullPath)))
-                {
-                    await writer.WriteAsync(report.ToString(Formatting.Indented));
-                }
-            }
-            Log.WroteReportBlob(fullPath);
-        }
-
-        private async Task WriteToBlob(JObject report)
-        {
-            var blob = DestinationContainer.GetBlockBlobReference(ReportName);
-            Log.WritingReportBlob(blob.Uri.AbsoluteUri);
-            if (!WhatIf)
-            {
-                blob.Properties.ContentType = MimeTypes.Json;
-                await blob.UploadTextAsync(report.ToString(Formatting.Indented));
-            }
-            Log.WroteReportBlob(blob.Uri.AbsoluteUri);
-        }
-
-        private void LoadDefaults()
-        {
+            base.LoadDefaults();
             WarehouseConnection = WarehouseConnection ?? Config.Sql.Warehouse;
-            Destination = Destination ?? Config.Storage.Primary;
-            if (Destination != null)
-            {
-                DestinationContainer = Destination.CreateCloudBlobClient().GetContainerReference(
-                    String.IsNullOrEmpty(DestinationContainerName) ? DefaultContainerName : DestinationContainerName);
-            }
         }
 
         private async Task<JArray> GatherOverallRankings()
@@ -148,7 +92,7 @@ namespace NuGet.Services.Work.Jobs
 
                 // Execute it and return the results
                 return new JArray(
-                    (await connection.QueryAsync<SearchRankingEntry>(script))
+                    (await connection.QueryWithRetryAsync<SearchRankingEntry>(script, new { RankingCount }))
                         .Select(e => e.PackageId));
             }
         }
@@ -171,7 +115,7 @@ namespace NuGet.Services.Work.Jobs
 
                 // Execute it and return the results
                 return new JArray(
-                    (await connection.QueryAsync<SearchRankingEntry>(script, new { ProjectGuid = projectType }))
+                    (await connection.QueryWithRetryAsync<SearchRankingEntry>(script, new { RankingCount, ProjectGuid = projectType }))
                         .Select(e => e.PackageId));
             }
         }
@@ -268,6 +212,12 @@ namespace NuGet.Services.Work.Jobs
             Message = "Generating Search Ranking Report from {0}/{1} to {2}.",
             Level = EventLevel.Informational)]
         public void GeneratingSearchRankingReport(string dbServer, string db, string destinaton) { WriteEvent(11, dbServer, db, destinaton); }
+
+        [Event(
+            eventId: 12,
+            Message = "Query timed out, retrying",
+            Level = EventLevel.Informational)]
+        public void Retrying() { WriteEvent(12); }
 
         public static class Tasks
         {

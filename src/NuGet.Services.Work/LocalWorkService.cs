@@ -9,7 +9,7 @@ using NuGet.Services.ServiceModel;
 
 namespace NuGet.Services.Work
 {
-    [Service("Work")]
+    [Service("LocalWork")]
     public class LocalWorkService : WorkService
     {
         [Obsolete("Do not use, use LocalWorkService.Create instead")]
@@ -41,7 +41,7 @@ namespace NuGet.Services.Work
                             0),
                         Environment.MachineName),
                     Configuration = configuration,
-                    Services = new [] { "Work" }
+                    Services = new[] { "LocalWork" }
                 });
             var name = new ServiceName(host.Description.InstanceName, ServiceDefinition.FromType<WorkService>().Name);
             host.Initialize();
