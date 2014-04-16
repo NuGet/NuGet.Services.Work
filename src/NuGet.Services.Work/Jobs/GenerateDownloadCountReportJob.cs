@@ -132,7 +132,7 @@ namespace NuGet.Services.Work.Jobs
         {
             base.LoadDefaults();
             WarehouseConnection = WarehouseConnection ?? Config.Sql.Warehouse;
-            PackagesConnection = PackagesConnection ?? Config.Sql.Primary;
+            PackagesConnection = PackagesConnection ?? Config.Sql.Legacy;
         }
 
         public class DownloadCountData
