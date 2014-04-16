@@ -1,4 +1,4 @@
-﻿SELECT TOP(200) Dimension_Package.PackageId, SUM(CASE WHEN Dimension_Operation.Operation = 'Install' THEN DownloadCount ELSE (0.5 * DownloadCount) END) 'Downloads'
+﻿SELECT TOP(@RankingCount) Dimension_Package.PackageId, SUM(CASE WHEN Dimension_Operation.Operation = 'Install' THEN DownloadCount ELSE (0.5 * DownloadCount) END) 'Downloads'
 FROM Fact_Download
 INNER JOIN Dimension_Package ON Dimension_Package.Id = Fact_Download.Dimension_Package_Id
 INNER JOIN Dimension_Date ON Dimension_Date.Id = Fact_Download.Dimension_Date_Id
