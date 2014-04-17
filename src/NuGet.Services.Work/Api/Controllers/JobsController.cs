@@ -55,14 +55,20 @@ namespace NuGet.Services.Work.Api.Controllers
         [Route("{jobName}/latest", Name = Routes.GetLatestForJob)]
         public async Task<IHttpActionResult> GetLatestByJob(string jobName)
         {
-            return Content(HttpStatusCode.OK, (await Queue.GetLatestForJob(jobName)).ToModel(Url));
+            var invocation = await Queue.GetLatestForJob(jobName);
+            if (invocation == null)
+            {
+                return NotFound();
+            }
+            return Content(HttpStatusCode.OK, invocation.ToModel(Url));
         }
 
         [Route("{jobName}/log", Name = Routes.GetLatestLogForJob)]
         public async Task<IHttpActionResult> GetLatestLogByJob(string jobName)
         {
             var invocation = await Queue.GetLatestForJob(jobName);
-            if(invocation == null || String.IsNullOrEmpty(invocation.LogUrl)) {
+            if (invocation == null || String.IsNullOrEmpty(invocation.LogUrl))
+            {
                 return NotFound();
             }
             return await TransferBlob(invocation.LogUrl);
