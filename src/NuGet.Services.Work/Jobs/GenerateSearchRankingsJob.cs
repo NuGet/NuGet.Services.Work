@@ -35,8 +35,8 @@ namespace NuGet.Services.Work.Jobs
 
             RankingCount = RankingCount ?? DefaultRankingCount;
 
-            // Extend the job lease to 30 minutes, since this job only runs daily
-            await Extend(TimeSpan.FromMinutes(30));
+            // Extend the job lease to 2 hours, since this job only runs daily
+            await Extend(TimeSpan.FromHours(2));
 
             string destination = String.IsNullOrEmpty(OutputDirectory) ?
                 (Destination.Credentials.AccountName + "/" + DestinationContainer.Name) :
@@ -92,7 +92,7 @@ namespace NuGet.Services.Work.Jobs
 
                 // Execute it and return the results
                 return new JArray(
-                    (await connection.QueryWithRetryAsync<SearchRankingEntry>(script, new { RankingCount }))
+                    (await connection.QueryWithRetryAsync<SearchRankingEntry>(script, new { RankingCount }, commandTimeout: 120))
                         .Select(e => e.PackageId));
             }
         }
@@ -115,7 +115,7 @@ namespace NuGet.Services.Work.Jobs
 
                 // Execute it and return the results
                 return new JArray(
-                    (await connection.QueryWithRetryAsync<SearchRankingEntry>(script, new { RankingCount, ProjectGuid = projectType }))
+                    (await connection.QueryWithRetryAsync<SearchRankingEntry>(script, new { RankingCount, ProjectGuid = projectType }, commandTimeout: 120))
                         .Select(e => e.PackageId));
             }
         }
