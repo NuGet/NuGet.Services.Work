@@ -54,11 +54,10 @@ namespace NuGet.Services.Work.Jobs
         private async Task<int> DeletePackageStatistics(int warehouseHighWatermark)
         {
             // Capture the date we want to use as the threshold now to prevent new things from appearing after each query
-            var threshold = DateTime.UtcNow.AddDays(-7);
+            var threshold = DateTime.UtcNow.Date.AddDays(-7);
             using (var connection = await Source.ConnectTo())
             {
                 int timeouts = 0;
-                int iterations = 0;
                 int total = 0;
                 int rows;
                 do
@@ -116,7 +115,7 @@ namespace NuGet.Services.Work.Jobs
                     Log.PurgedStatisticsBatch(Source.DataSource, Source.InitialCatalog, Destination.DataSource, Destination.InitialCatalog, rows);
                     total += rows;
                 }
-                while (rows < BatchSize.Value && iterations++ < 50 && timeouts < 10);
+                while (rows == BatchSize.Value && timeouts < 10);
                 return total;
             }
         }
