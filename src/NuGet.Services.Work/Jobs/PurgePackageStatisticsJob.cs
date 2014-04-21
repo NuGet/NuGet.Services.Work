@@ -53,13 +53,17 @@ namespace NuGet.Services.Work.Jobs
 
         private async Task<int> DeletePackageStatistics(int warehouseHighWatermark)
         {
+            // Capture the date we want to use as the threshold now to prevent new things from appearing after each query
+            var threshold = DateTime.UtcNow.AddDays(-7);
             using (var connection = await Source.ConnectTo())
             {
+                int timeouts = 0;
                 int iterations = 0;
                 int total = 0;
                 int rows;
                 do
                 {
+                    rows = 0;
                     Log.PurgingStatisticsBatch(Source.DataSource, Source.InitialCatalog, Destination.DataSource, Destination.InitialCatalog, BatchSize.Value);
                     if (WhatIf)
                     {
@@ -67,21 +71,52 @@ namespace NuGet.Services.Work.Jobs
                     }
                     else
                     {
-                        rows = (await connection.QueryAsync<int>(@"
-                            DELETE TOP(@BatchSize) [PackageStatistics]
-                            WHERE [Key] <= @OriginalKey
-                            AND [Key] <= (SELECT DownloadStatsLastAggregatedId FROM GallerySettings)
-                            AND [TimeStamp] < DATEADD(day, -7, GETDATE())
-                        ", new
-                             {
-                                 OriginalKey = warehouseHighWatermark,
-                                 BatchSize = BatchSize.Value
-                             })).SingleOrDefault();
+                        try
+                        {
+                            rows = (await connection.QueryAsync<int>(@"
+                                DELETE TOP(@BatchSize) [PackageStatistics]
+                                WHERE [Key] <= @OriginalKey
+                                AND [Key] <= (SELECT DownloadStatsLastAggregatedId FROM GallerySettings)
+                                AND [TimeStamp] < @Threshold
+
+                                SELECT @@ROWCOUNT
+                            ", new
+                            {
+                                OriginalKey = warehouseHighWatermark,
+                                BatchSize = BatchSize.Value,
+                                Threshold = threshold
+                            })).SingleOrDefault();
+                        }
+                        catch (SqlException ex)
+                        {
+                            switch (ex.Number)
+                            {
+                                case -2:   // Client Timeout
+                                case 701:  // Out of Memory
+                                case 1204: // Lock Issue 
+                                case 1205: // >>> Deadlock Victim
+                                case 1222: // Lock Request Timeout
+                                case 8645: // Timeout waiting for memory resource 
+                                case 8651: // Low memory condition 
+                                    timeouts++;
+                                    if (timeouts >= 10)
+                                    {
+                                        throw; // Too many timeouts!
+                                    }
+                                    else
+                                    {
+                                        Log.TimeoutDuringDelete();
+                                    }
+                                    break;
+                                default:
+                                    throw;
+                            }
+                        }
                     }
                     Log.PurgedStatisticsBatch(Source.DataSource, Source.InitialCatalog, Destination.DataSource, Destination.InitialCatalog, rows);
                     total += rows;
                 }
-                while (rows > 0 && iterations++ < 10);
+                while (rows < BatchSize.Value && iterations++ < 50 && timeouts < 10);
                 return total;
             }
         }
@@ -140,6 +175,12 @@ namespace NuGet.Services.Work.Jobs
             Level = EventLevel.Informational,
             Message = "Last replicated key from {0}/{1} is {2}")]
         public void GotLastReplicatedKey(string server, string database, int key) { WriteEvent(6, server, database, key); }
+
+        [Event(
+            eventId: 7,
+            Level = EventLevel.Warning,
+            Message = "Timed out deleting rows. Trying again...")]
+        public void TimeoutDuringDelete() { WriteEvent(7); }
 
         public static class Tasks
         {
