@@ -1,0 +1,104 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace NuGet.Services.Work.Helpers
+{
+    public static class MetadataEventStreamSQLQueries
+    {
+        public const string GetAssertionsQuery = @"DECLARE		@PackageAssertions TABLE
+(
+			[Key] int
+		,	PackageId nvarchar(128)
+		,	[Version] nvarchar(64)
+)
+
+DECLARE		@PackageOwnerAssertions TABLE
+(
+			[Key] int
+		,	Username nvarchar(64)
+		,	PackageId nvarchar(128)
+		,	[Version] nvarchar(64)
+)
+
+DECLARE		@ProcessingDateTime datetime = GETUTCDATE()
+
+BEGIN TRAN
+
+UPDATE		TOP(@MaxRecords) LogPackages
+SET			ProcessAttempts = ProcessAttempts + 1
+		,	FirstProcessingDateTime = ISNULL(FirstProcessingDateTime, @ProcessingDateTime)
+		,	LastProcessingDateTime = @ProcessingDateTime
+OUTPUT		inserted.[Key]
+		,	inserted.PackageId
+		,	inserted.[Version]
+INTO		@PackageAssertions
+WHERE		ProcessedDateTime IS NULL
+
+UPDATE		TOP(@MaxRecords) LogPackageOwners
+SET			ProcessAttempts = ProcessAttempts + 1
+		,	FirstProcessingDateTime = ISNULL(FirstProcessingDateTime, @ProcessingDateTime)
+		,	LastProcessingDateTime = @ProcessingDateTime
+OUTPUT		inserted.[Key]
+		,	inserted.Username
+		,	inserted.PackageId
+		,	inserted.Version
+INTO		@PackageOwnerAssertions
+WHERE		ProcessedDateTime IS NULL
+
+UPDATE		LogPackages
+SET			ProcessedDateTime = @ProcessingDateTime
+WHERE		[Key] NOT IN (SELECT MaxKey = MAX([Key])
+			FROM		@PackageAssertions
+			GROUP BY	PackageId
+					,	[Version])
+
+UPDATE		LogPackageOwners
+SET			ProcessedDateTime = @ProcessingDateTime
+WHERE		[Key] NOT IN (SELECT MaxKey = MAX([Key])
+			FROM		@PackageOwnerAssertions
+			GROUP BY	Username
+					,	PackageId
+					,	[Version])
+COMMIT TRAN
+
+SELECT		LogPackages.*
+FROM		(
+			SELECT		MaxKey = MAX([Key])
+					,	PackageId
+					,	[Version]
+			FROM		@PackageAssertions
+			GROUP BY	PackageId
+					,	[Version]
+			) PackageAssertions
+INNER JOIN	LogPackages WITH (NOLOCK)
+		ON	LogPackages.[Key] = PackageAssertions.MaxKey
+
+SELECT		LogPackageOwners.*
+FROM		(
+			SELECT		MaxKey = MAX([Key])
+					,	Username
+					,	PackageId
+					,	[Version]
+			FROM		@PackageOwnerAssertions
+			GROUP BY	Username
+					,	PackageId
+					,	[Version]
+			) PackageOwnerAssertions
+INNER JOIN	LogPackageOwners WITH (NOLOCK)
+		ON	LogPackageOwners.[Key] = PackageOwnerAssertions.MaxKey";
+
+        public const string ProcessAssertionsQuery = @"DECLARE		@ProcessedDateTime datetime = GETUTCDATE()
+
+UPDATE		LogPackages
+SET			ProcessedDateTime = @ProcessedDateTime
+WHERE		[Key] IN @packageAssertionKeys
+
+UPDATE		LogPackageOwners
+SET			ProcessedDateTime = @ProcessedDateTime
+WHERE		[Key] IN @packageOwnerAssertionKeys";
+    }
+    // TODO : Add PurgeAssertionsQuery
+}
