@@ -82,13 +82,19 @@ namespace NuGet.Services.Work.Jobs
         public MetadataEventStreamJob(ConfigurationHub configHub) : base(configHub) { }
         protected internal override async Task<JobContinuation> Execute()
         {
+            PushToCloud = true;
+            UpdateTables = true;
             var cstr = GetConnectionString() ?? Config.Sql.GetConnectionString(KnownSqlConnection.Legacy);
-            Console.WriteLine("Will look for changes in {0}/{1} ", cstr.DataSource, cstr.InitialCatalog);
+            if(cstr == null)
+            {
+                throw new ArgumentNullException("TargetServer");
+            }
+            Log.SourceDatabase(cstr.DataSource, cstr.InitialCatalog);
             
             EventStreamStorage = EventStreamStorage ?? Config.Storage.Legacy;
             EventStreamContainer = EventStreamStorage.CreateCloudBlobClient().GetContainerReference(
                 String.IsNullOrEmpty(EventStreamContainerName) ? DefaultEventStreamContainerName : EventStreamContainerName);
-            Console.WriteLine("Will push the events to {0}/{1} ", EventStreamContainer.Uri);
+            Console.WriteLine("Will push the events to {0} ", EventStreamContainer.Uri);
 
             if (await EventStreamContainer.CreateIfNotExistsAsync())
             {
@@ -109,67 +115,59 @@ namespace NuGet.Services.Work.Jobs
         {
             JObject json = null;
 
-            try
+            using (var connection = await sql.ConnectTo())
             {
-                using (var connection = await sql.ConnectTo())
+                Console.WriteLine("Connected to database in {0}/{1} obtained: {2}", connection.DataSource, connection.Database, connection.ClientConnectionId);
+                Console.WriteLine("Querying multiple queries...");
+                var results = connection.QueryMultiple(MetadataEventStreamSQLQueries.GetAssertionsQuery, new { MaxRecords = MaxRecords });
+                Console.WriteLine("Completed multiple queries.");
+
+                Console.WriteLine("Extracting packageassertions and owner assertions...");
+                var packageAssertions = results.Read<PackageAssertionSet>();
+                var packageOwnerAssertions = results.Read<PackageOwnerAssertion>();
+
+                // Extract the assertions as JArray
+                Debug.Assert(packageAssertions.Count() <= MaxRecords);
+                Debug.Assert(packageOwnerAssertions.Count() <= MaxRecords);
+                var jArrayAssertions = GetJArrayAssertions(packageAssertions, packageOwnerAssertions);
+
+                if (jArrayAssertions.Count > 0)
                 {
-                    Console.WriteLine("Connected to database in {0}/{1} obtained: {2}", connection.DataSource, connection.Database, connection.ClientConnectionId);
-                    Console.WriteLine("Querying multiple queries...");
-                    var results = connection.QueryMultiple(MetadataEventStreamSQLQueries.GetAssertionsQuery, new { MaxRecords = MaxRecords });
-                    Console.WriteLine("Completed multiple queries.");
+                    var timeStamp = DateTime.UtcNow;
+                    var indexJSONBlob = EventStreamContainer.GetBlockBlobReference(IndexJson);
 
-                    Console.WriteLine("Extracting packageassertions and owner assertions...");
-                    var packageAssertions = results.Read<PackageAssertionSet>();
-                    var packageOwnerAssertions = results.Read<PackageOwnerAssertion>();
+                    JObject indexJSON = await GetJSON(indexJSONBlob) ?? (JObject)EmptyIndexJSON.DeepClone();
 
-                    // Extract the assertions as JArray
-                    Debug.Assert(packageAssertions.Count() <= MaxRecords);
-                    Debug.Assert(packageOwnerAssertions.Count() <= MaxRecords);
-                    var jArrayAssertions = GetJArrayAssertions(packageAssertions, packageOwnerAssertions);
+                    // Get Final JObject with timeStamp, previous, next links etc
+                    json = GetJObject(jArrayAssertions, timeStamp, indexJSON);
 
-                    if (jArrayAssertions.Count > 0)
+                    var blobName = GetBlobName(timeStamp);
+
+                    // Write the blob. Update indexJSON blob and previous latest Blob
+                    await DumpJSON(json, blobName, timeStamp, indexJSON, indexJSONBlob);
+
+                    if (UpdateTables)
                     {
-                        var timeStamp = DateTime.UtcNow;
-                        var indexJSONBlob = EventStreamContainer.GetBlockBlobReference(IndexJson);
-
-                        JObject indexJSON = await GetJSON(indexJSONBlob) ?? (JObject)EmptyIndexJSON.DeepClone();
-
-                        // Get Final JObject with timeStamp, previous, next links etc
-                        json = GetJObject(jArrayAssertions, timeStamp, indexJSON);
-
-                        var blobName = GetBlobName(timeStamp);
-
-                        // Write the blob. Update indexJSON blob and previous latest Blob
-                        await DumpJSON(json, blobName, timeStamp, indexJSON, indexJSONBlob);
-
-                        if (UpdateTables)
-                        {
-                            // Mark assertions as processed
-                            await MarkAssertionsAsProcessed(connection, packageAssertions, packageOwnerAssertions);
-                        }
-                        else
-                        {
-                            Console.WriteLine("Not Updating tables...");
-                        }
+                        // Mark assertions as processed
+                        await MarkAssertionsAsProcessed(connection, packageAssertions, packageOwnerAssertions);
                     }
                     else
                     {
-                        Console.WriteLine("No Assertions to make");
-                        if (UpdateTables)
-                        {
-                            Console.WriteLine("And, not updating tables");
-                        }
-                        else
-                        {
-                            Console.WriteLine("Not updating tables anyways...");
-                        }
+                        Console.WriteLine("Not Updating tables...");
                     }
                 }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);
-                Console.WriteLine(ex.StackTrace);
+                else
+                {
+                    Console.WriteLine("No Assertions to make");
+                    if (UpdateTables)
+                    {
+                        Console.WriteLine("And, not updating tables");
+                    }
+                    else
+                    {
+                        Console.WriteLine("Not updating tables anyways...");
+                    }
+                }
             }
 
             return json;
@@ -312,7 +310,7 @@ namespace NuGet.Services.Work.Jobs
         }
 
         /// <summary>
-        /// This function simply dumps the json onto console and to the blob if applicable
+        /// Dumps the JSON containing the assertion set onto blob storage
         /// </summary>
         public static async Task DumpJSON(JObject json, string blobName, DateTime timeStamp, JObject indexJSON, CloudBlockBlob indexJSONBlob, CloudBlobContainer eventsContainer, bool pushToCloud)
         {
@@ -416,5 +414,11 @@ namespace NuGet.Services.Work.Jobs
     {
         public static readonly MetadataEventStreamEventSource Log = new MetadataEventStreamEventSource();
         private MetadataEventStreamEventSource() { }
+
+        [Event(
+            eventId: 1,
+            Level = EventLevel.Informational,
+            Message = "Will look for changes in {0}/{1}")]
+        public void SourceDatabase(string server, string database) { WriteEvent(1, server, database); }
     }
 }
