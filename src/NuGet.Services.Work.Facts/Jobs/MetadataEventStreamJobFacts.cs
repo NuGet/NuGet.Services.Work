@@ -289,7 +289,7 @@ namespace MetadataClient
         public void GetNupkgArgumentNull()
         {
             // Arrange, Act & Assert
-            Assert.Throws<ArgumentNullException>(() => { MetadataEventStreamJob.GetNupkg(nupkgUrlFormat: null, packageId: "A", version: "1.0.0"); });
+            Assert.Throws<ArgumentNullException>(() => { MetadataEventStreamJob.GetNupkgUrl(nupkgUrlFormat: null, packageId: "A", version: "1.0.0"); });
         }
 
         [Fact]

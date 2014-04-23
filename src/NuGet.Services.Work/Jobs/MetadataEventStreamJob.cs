@@ -62,35 +62,23 @@ namespace NuGet.Services.Work.Jobs
         /// </summary>
         public string EventStreamContainerName { get; set; }
 
-        public CloudBlobContainer EventStreamContainer
-        {
-            get;
-            private set;
-        }
+        /// <summary>
+        /// String format using which the url to the nupkg
+        /// for a given packageId, and packageVersion can be created
+        /// </summary>
+        public string NupkgUrlFormat { get; set; }
 
-        public string NupkgUrlFormat
-        {
-            get;
-            private set;
-        }
+        /// <summary>
+        /// Number of records that can be pulled from any of the Log tables
+        /// </summary>
+        public int MaxRecords { get; set; }
 
-        public int MaxRecords
-        {
-            get;
-            private set;
-        }
+        private CloudBlobContainer EventStreamContainer { get; set; }
 
-        public bool PushToCloud
-        {
-            get;
-            private set;
-        }
+        private bool PushToCloud { get; set; }
 
-        public static bool UpdateTables
-        {
-            get;
-            private set;
-        }
+        private bool UpdateTables { get; set; }
+
         public MetadataEventStreamJob(ConfigurationHub configHub) : base(configHub) { }
         protected internal override async Task<JobContinuation> Execute()
         {
@@ -117,7 +105,7 @@ namespace NuGet.Services.Work.Jobs
             return Complete();
         }
 
-        public async Task<JObject> DetectChanges(SqlConnectionStringBuilder sql)
+        private async Task<JObject> DetectChanges(SqlConnectionStringBuilder sql)
         {
             JObject json = null;
 
@@ -187,7 +175,7 @@ namespace NuGet.Services.Work.Jobs
             return json;
         }
 
-        public JArray GetJArrayAssertions(IEnumerable<PackageAssertionSet> packageAssertions, IEnumerable<PackageOwnerAssertion> packageOwnerAssertions)
+        private JArray GetJArrayAssertions(IEnumerable<PackageAssertionSet> packageAssertions, IEnumerable<PackageOwnerAssertion> packageOwnerAssertions)
         {
             return GetJArrayAssertions(packageAssertions, packageOwnerAssertions, NupkgUrlFormat);
         }
@@ -206,7 +194,7 @@ namespace NuGet.Services.Work.Jobs
                 var key = new Tuple<string, string>(packageAssertion.PackageId, packageAssertion.Version);
                 if (packageAssertion.Exists)
                 {
-                    packageAssertion.Nupkg = GetNupkg(nupkgUrlFormat, packageAssertion.PackageId, packageAssertion.Version);
+                    packageAssertion.Nupkg = GetNupkgUrl(nupkgUrlFormat, packageAssertion.PackageId, packageAssertion.Version);
                     packagesAndOwners.Add(key, packageAssertion);
                 }
                 else
@@ -293,12 +281,18 @@ namespace NuGet.Services.Work.Jobs
             return json;
         }
 
+        /// <summary>
+        /// Gets the blob name of the assertion set based on a given timeStamp
+        /// </summary>
         public static string GetBlobName(DateTime timeStamp)
         {
             return String.Format(EventFileNameFormat, EventsPrefix, timeStamp.ToString(DateTimeFormat));
         }
 
-        public static string GetNupkg(string nupkgUrlFormat, string packageId, string version)
+        /// <summary>
+        /// Gets the nupkg url for a given packageId and version using the nupkgUrlFormat
+        /// </summary>
+        public static string GetNupkgUrl(string nupkgUrlFormat, string packageId, string version)
         {
             if (nupkgUrlFormat == null)
             {
@@ -307,12 +301,12 @@ namespace NuGet.Services.Work.Jobs
             return String.Format(CultureInfo.InvariantCulture, nupkgUrlFormat, packageId, version);
         }
 
-        public static string GetRelativePathToEvent(string eventName)
+        private static string GetRelativePathToEvent(string eventName)
         {
             return String.Format(RelativeEventPathFormat, eventName);
         }
 
-        public async Task DumpJSON(JObject json, string blobName, DateTime timeStamp, JObject indexJSON, CloudBlockBlob indexJSONBlob)
+        private async Task DumpJSON(JObject json, string blobName, DateTime timeStamp, JObject indexJSON, CloudBlockBlob indexJSONBlob)
         {
             await DumpJSON(json, blobName, timeStamp, indexJSON, indexJSONBlob, EventStreamContainer, PushToCloud);
         }
