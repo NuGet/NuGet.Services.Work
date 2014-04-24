@@ -27,7 +27,7 @@ DECLARE		@ProcessingDateTime datetime = GETUTCDATE()
 
 BEGIN TRAN
 
-UPDATE		TOP(@MaxRecords) LogPackages
+UPDATE		LogPackages
 SET			ProcessAttempts = ProcessAttempts + 1
 		,	FirstProcessingDateTime = ISNULL(FirstProcessingDateTime, @ProcessingDateTime)
 		,	LastProcessingDateTime = @ProcessingDateTime
@@ -35,9 +35,14 @@ OUTPUT		inserted.[Key]
 		,	inserted.PackageId
 		,	inserted.[Version]
 INTO		@PackageAssertions
-WHERE		ProcessedDateTime IS NULL
+WHERE       [Key] IN
+            (
+            SELECT  TOP(@MaxRecords) [Key]
+            FROM    dbo.LogPackages
+            WHERE	ProcessedDateTime IS NULL
+            ORDER BY [Key])
 
-UPDATE		TOP(@MaxRecords) LogPackageOwners
+UPDATE		LogPackageOwners
 SET			ProcessAttempts = ProcessAttempts + 1
 		,	FirstProcessingDateTime = ISNULL(FirstProcessingDateTime, @ProcessingDateTime)
 		,	LastProcessingDateTime = @ProcessingDateTime
@@ -46,22 +51,40 @@ OUTPUT		inserted.[Key]
 		,	inserted.PackageId
 		,	inserted.Version
 INTO		@PackageOwnerAssertions
-WHERE		ProcessedDateTime IS NULL
+WHERE       [Key] IN
+            (
+            SELECT  TOP(@MaxRecords) [Key]
+            FROM    dbo.LogPackageOwners
+            WHERE	ProcessedDateTime IS NULL
+            ORDER BY [Key])
 
 UPDATE		LogPackages
 SET			ProcessedDateTime = @ProcessingDateTime
-WHERE		[Key] NOT IN (SELECT MaxKey = MAX([Key])
-			FROM		@PackageAssertions
-			GROUP BY	PackageId
-					,	[Version])
+WHERE		[Key] IN
+            (
+            SELECT      [Key]
+            FROM        @PackageAssertions
+            WHERE       [Key] NOT IN
+                        (
+                        SELECT      MaxKey = MAX([Key])
+                        FROM		@PackageAssertions
+                        GROUP BY	PackageId
+		                        ,	[Version]))
 
 UPDATE		LogPackageOwners
 SET			ProcessedDateTime = @ProcessingDateTime
-WHERE		[Key] NOT IN (SELECT MaxKey = MAX([Key])
-			FROM		@PackageOwnerAssertions
-			GROUP BY	Username
-					,	PackageId
-					,	[Version])
+WHERE		[Key] IN
+            (
+            SELECT      [Key]
+            FROM		@PackageOwnerAssertions
+            WHERE		[Key] NOT IN
+                        (
+                        SELECT      MaxKey = MAX([Key])
+			            FROM		@PackageOwnerAssertions
+			            GROUP BY	Username
+					            ,	PackageId
+					            ,	[Version]))
+
 COMMIT TRAN
 
 SELECT		LogPackages.*
@@ -99,6 +122,23 @@ WHERE		[Key] IN @packageAssertionKeys
 UPDATE		LogPackageOwners
 SET			ProcessedDateTime = @ProcessedDateTime
 WHERE		[Key] IN @packageOwnerAssertionKeys";
+
+        // Purge Assertions Queries
+
+        public const string PurgePackageAssertionsQuery = @"DELETE TOP(@MaxPurgeRecords) FROM dbo.LogPackages
+WHERE ProcessedDateTime IS NOT NULL
+AND ProcessedDateTime < @PurgeCutoffDateTime";
+
+        public const string CountPackageAssertionsToPurgeQuery = @"SELECT COUNT(*) FROM dbo.LogPackages WITH(NOLOCK)
+WHERE ProcessedDateTime IS NOT NULL
+AND ProcessedDateTime < @PurgeCutoffDateTime";
+
+        public const string PurgePackageOwnerAssertionsQuery = @"DELETE TOP(@MaxPurgeRecords) FROM dbo.LogPackageOwners
+WHERE ProcessedDateTime IS NOT NULL
+AND ProcessedDateTime < @PurgeCutoffDateTime";
+
+        public const string CountPackageOwnerAssertionsToPurgeQuery = @"SELECT COUNT(*) FROM dbo.LogPackageOwners WITH(NOLOCK)
+WHERE ProcessedDateTime IS NOT NULL
+AND ProcessedDateTime < @PurgeCutoffDateTime";
     }
-    // TODO : Add PurgeAssertionsQuery
 }

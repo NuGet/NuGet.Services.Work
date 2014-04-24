@@ -44,7 +44,14 @@ namespace NuGet.Services.Work.Jobs
         private const string EventAssertions = "assertions";
 
         private const string DefaultEventStreamContainerName = "eventstream";
+        /// <summary>
+        /// The following cap overrides the MaxUpdateRecords and MaxPurgeRecords and never allows updates or deletes on more than 1000 records in a transaction
+        /// </summary>
         private const int MaxRecordsCap = 1000;
+        /// <summary>
+        /// The following cap overrides the MinPurgeAge parameter and never allows purging of records within the last day
+        /// </summary>
+        private static readonly TimeSpan MinPurgeAgeCap = TimeSpan.Parse("1");
         private static readonly JsonSerializerSettings DefaultJsonSerializerSettings = new JsonSerializerSettings() { ContractResolver = new CamelCasePropertyNamesContractResolver() };
         public static readonly JObject EmptyIndexJSON = JObject.Parse(@"{
   '" + EventLastUpdated + @"': '',
@@ -71,7 +78,13 @@ namespace NuGet.Services.Work.Jobs
         /// <summary>
         /// Number of records that can be pulled from any of the Log tables
         /// </summary>
-        public int MaxRecords { get; set; }
+        public int MaxUpdateRecords { get; set; }
+
+        #region PARAMETERS FOR PURGING ASSERTIONS
+        public int MaxPurgeRecords { get; set; }
+
+        public TimeSpan MinPurgeAge { get; set; }
+        #endregion
 
         private CloudBlobContainer EventStreamContainer { get; set; }
 
@@ -84,8 +97,26 @@ namespace NuGet.Services.Work.Jobs
         {
             PushToCloud = true;
             UpdateTables = true;
+
+            if (String.IsNullOrEmpty(NupkgUrlFormat))
+            {
+                throw new ArgumentNullException("NupkgUrlFormat");
+            }
+
+            // If MinPurgeAge is not specified, its default value TimeSpan.Zero will be less than the cap and will get overridden
+
+            if (MaxPurgeRecords == 0)
+            {
+                MaxPurgeRecords = MaxRecordsCap;
+            }
+
+            if (MaxUpdateRecords == 0)
+            {
+                MaxUpdateRecords = MaxRecordsCap;
+            }
+
             var cstr = GetConnectionString() ?? Config.Sql.GetConnectionString(KnownSqlConnection.Legacy);
-            if(cstr == null)
+            if (cstr == null)
             {
                 throw new ArgumentNullException("TargetServer");
             }
@@ -101,72 +132,108 @@ namespace NuGet.Services.Work.Jobs
                 Console.WriteLine("EventStream Container was not present. Created it");
             }
 
-            MaxRecords = Math.Min(MaxRecords, MaxRecordsCap);
-            Console.WriteLine("(Capped) Max Records is {0}", MaxRecords);
+            // MinPurgeAge should be at least MinPurgeAgeCap
+            MinPurgeAge = MinPurgeAge > MinPurgeAgeCap ? MinPurgeAge : MinPurgeAgeCap;
+            Console.WriteLine("(Capped) Min Purge Age is {0}", MinPurgeAge);
 
-            Console.WriteLine("Started Detecting changes");
-            await DetectChanges(cstr);
-            Console.WriteLine("Detected changes");
+            // MaxPurgeRecords should be less than MaxRecordsCap
+            MaxPurgeRecords = Math.Min(MaxPurgeRecords, MaxRecordsCap);
+            Console.WriteLine("(Capped) Max Purge Records is {0}", MaxPurgeRecords);
 
+            // MaxUpdateRecords should be less than MaxRecordsCap
+            MaxUpdateRecords = Math.Min(MaxUpdateRecords, MaxRecordsCap);
+            Console.WriteLine("(Capped) Max Update Records is {0}", MaxUpdateRecords);
+
+            using (var connection = await cstr.ConnectTo())
+            {
+                Console.WriteLine("Connected to database in {0}/{1} obtained: {2}", connection.DataSource, connection.Database, connection.ClientConnectionId);
+                Console.WriteLine("Started Purging assertions");
+                await PurgeAssertions(connection);
+                Console.WriteLine("Completed Purging assertions");
+                Console.WriteLine("Started Detecting changes");
+                await DetectChanges(connection);
+                Console.WriteLine("Completed Detecting changes");
+            }
             return Complete();
         }
 
-        private async Task<JObject> DetectChanges(SqlConnectionStringBuilder sql)
+        private async Task PurgeAssertions(SqlConnection connection)
+        {
+            var purgeCutoffDateTime = DateTime.UtcNow - MinPurgeAge;
+            Console.WriteLine("Purge Cutoff DateTime : {0}", purgeCutoffDateTime);
+            await PurgeAssertions(connection, purgeCutoffDateTime, MetadataEventStreamSQLQueries.CountPackageAssertionsToPurgeQuery, MetadataEventStreamSQLQueries.PurgePackageAssertionsQuery);
+            await PurgeAssertions(connection, purgeCutoffDateTime, MetadataEventStreamSQLQueries.CountPackageOwnerAssertionsToPurgeQuery, MetadataEventStreamSQLQueries.PurgePackageOwnerAssertionsQuery);
+        }
+
+        private async Task PurgeAssertions(SqlConnection connection, DateTime purgeCutoffDateTime, string countQuery, string purgeQuery)
+        {
+            Console.WriteLine("Querying the number of assertions to purge...");
+            var results = await connection.QueryAsync<int>(countQuery, new { PurgeCutoffDateTime = purgeCutoffDateTime });
+            var count = results.Single();
+            if (count > 0)
+            {
+                Console.WriteLine("Started Purging {0} assertions", count);
+                await connection.QueryAsync<int>(purgeQuery, new { MaxPurgeRecords = MaxPurgeRecords, PurgeCutoffDateTime = purgeCutoffDateTime });
+                Console.WriteLine("Completed purging assertions");
+            }
+            else
+            {
+                Console.WriteLine("No records to purge");
+            }
+        }
+
+        private async Task<JObject> DetectChanges(SqlConnection connection)
         {
             JObject json = null;
 
-            using (var connection = await sql.ConnectTo())
+            Console.WriteLine("Querying multiple queries...");
+            var results = connection.QueryMultiple(MetadataEventStreamSQLQueries.GetAssertionsQuery, new { MaxRecords = MaxUpdateRecords });
+            Console.WriteLine("Completed multiple queries.");
+
+            Console.WriteLine("Extracting packageassertions and owner assertions...");
+            var packageAssertions = results.Read<PackageAssertionSet>();
+            var packageOwnerAssertions = results.Read<PackageOwnerAssertion>();
+
+            // Extract the assertions as JArray
+            Debug.Assert(packageAssertions.Count() <= MaxUpdateRecords);
+            Debug.Assert(packageOwnerAssertions.Count() <= MaxUpdateRecords);
+            var jArrayAssertions = GetJArrayAssertions(packageAssertions, packageOwnerAssertions);
+
+            if (jArrayAssertions.Count > 0)
             {
-                Console.WriteLine("Connected to database in {0}/{1} obtained: {2}", connection.DataSource, connection.Database, connection.ClientConnectionId);
-                Console.WriteLine("Querying multiple queries...");
-                var results = connection.QueryMultiple(MetadataEventStreamSQLQueries.GetAssertionsQuery, new { MaxRecords = MaxRecords });
-                Console.WriteLine("Completed multiple queries.");
+                var timeStamp = DateTime.UtcNow;
+                var indexJSONBlob = EventStreamContainer.GetBlockBlobReference(IndexJson);
 
-                Console.WriteLine("Extracting packageassertions and owner assertions...");
-                var packageAssertions = results.Read<PackageAssertionSet>();
-                var packageOwnerAssertions = results.Read<PackageOwnerAssertion>();
+                JObject indexJSON = await GetJSON(indexJSONBlob) ?? (JObject)EmptyIndexJSON.DeepClone();
 
-                // Extract the assertions as JArray
-                Debug.Assert(packageAssertions.Count() <= MaxRecords);
-                Debug.Assert(packageOwnerAssertions.Count() <= MaxRecords);
-                var jArrayAssertions = GetJArrayAssertions(packageAssertions, packageOwnerAssertions);
+                // Get Final JObject with timeStamp, previous, next links etc
+                json = GetJObject(jArrayAssertions, timeStamp, indexJSON);
 
-                if (jArrayAssertions.Count > 0)
+                var blobName = GetBlobName(timeStamp);
+
+                // Write the blob. Update indexJSON blob and previous latest Blob
+                await DumpJSON(json, blobName, timeStamp, indexJSON, indexJSONBlob);
+
+                if (UpdateTables)
                 {
-                    var timeStamp = DateTime.UtcNow;
-                    var indexJSONBlob = EventStreamContainer.GetBlockBlobReference(IndexJson);
-
-                    JObject indexJSON = await GetJSON(indexJSONBlob) ?? (JObject)EmptyIndexJSON.DeepClone();
-
-                    // Get Final JObject with timeStamp, previous, next links etc
-                    json = GetJObject(jArrayAssertions, timeStamp, indexJSON);
-
-                    var blobName = GetBlobName(timeStamp);
-
-                    // Write the blob. Update indexJSON blob and previous latest Blob
-                    await DumpJSON(json, blobName, timeStamp, indexJSON, indexJSONBlob);
-
-                    if (UpdateTables)
-                    {
-                        // Mark assertions as processed
-                        await MarkAssertionsAsProcessed(connection, packageAssertions, packageOwnerAssertions);
-                    }
-                    else
-                    {
-                        Console.WriteLine("Not Updating tables...");
-                    }
+                    // Mark assertions as processed
+                    await MarkAssertionsAsProcessed(connection, packageAssertions, packageOwnerAssertions);
                 }
                 else
                 {
-                    Console.WriteLine("No Assertions to make");
-                    if (UpdateTables)
-                    {
-                        Console.WriteLine("And, not updating tables");
-                    }
-                    else
-                    {
-                        Console.WriteLine("Not updating tables anyways...");
-                    }
+                    Console.WriteLine("Not Updating tables...");
+                }
+            }
+            else
+            {
+                Console.WriteLine("No Assertions to make");
+                if (UpdateTables)
+                {
+                    Console.WriteLine("And, not updating tables");
+                }
+                else
+                {
+                    Console.WriteLine("Not updating tables anyways...");
                 }
             }
 
