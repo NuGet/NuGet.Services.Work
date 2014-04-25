@@ -32,6 +32,7 @@ namespace NuGet.Services.Work.Jobs
 
         // File constants
         private const string IndexJson = "index.json";
+        private const string ContentType = "application/json";
 
         // Event constants
         private const string EventTimeStamp = "timestamp";
@@ -423,10 +424,7 @@ namespace NuGet.Services.Work.Jobs
                 var newestBlob = eventsContainer.GetBlockBlobReference(blobName);
 
                 // First upload the created block
-                using (var stream = new MemoryStream(Encoding.Default.GetBytes(json.ToString()), false))
-                {
-                    await newestBlob.UploadFromStreamAsync(stream);
-                }
+                await Upload(newestBlob, json.ToString(), ContentType);
 
                 if (!String.IsNullOrEmpty(previousNewestBlobName))
                 {
@@ -439,22 +437,25 @@ namespace NuGet.Services.Work.Jobs
 
                     previousNewestJSON[EventNewer] = GetRelativePathToEvent(blobName);
                     // Finally, upload the index block
-                    using (var stream = new MemoryStream(Encoding.Default.GetBytes(previousNewestJSON.ToString()), false))
-                    {
-                        await previousNewestBlob.UploadFromStreamAsync(stream);
-                    }
+                    await Upload(previousNewestBlob, previousNewestJSON.ToString(), ContentType);
                     Log.PreviousNewestBlob(previousNewestBlob.Uri.ToString());
                 }
 
                 // Finally, upload the index block
-                using (var stream = new MemoryStream(Encoding.Default.GetBytes(indexJSON.ToString()), false))
-                {
-                    await indexJSONBlob.UploadFromStreamAsync(stream);
-                }
+                await Upload(indexJSONBlob, indexJSON.ToString(), ContentType);
 
                 Log.NewestBlob(newestBlob.Uri.ToString());
             }
             Log.NewIndexJSON(indexJSON.ToString());
+        }
+
+        private static async Task Upload(CloudBlockBlob blob, string content, string contentType)
+        {
+            blob.Properties.ContentType = contentType;
+            using (var stream = new MemoryStream(Encoding.Default.GetBytes(content), false))
+            {
+                await blob.UploadFromStreamAsync(stream);
+            }
         }
 
         private static async Task MarkAssertionsAsProcessed(SqlConnection connection, IEnumerable<PackageAssertionSet> packageAssertions,
