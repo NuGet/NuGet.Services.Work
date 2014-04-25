@@ -120,39 +120,40 @@ namespace NuGet.Services.Work.Jobs
             {
                 throw new ArgumentNullException("TargetServer");
             }
+            cstr.TrimNetworkProtocol();
             Log.SourceDatabase(cstr.DataSource, cstr.InitialCatalog);
             
             EventStreamStorage = EventStreamStorage ?? Config.Storage.Legacy;
             EventStreamContainer = EventStreamStorage.CreateCloudBlobClient().GetContainerReference(
                 String.IsNullOrEmpty(EventStreamContainerName) ? DefaultEventStreamContainerName : EventStreamContainerName);
-            Console.WriteLine("Will push the events to {0} ", EventStreamContainer.Uri);
+            Log.TargetStorageContainer(EventStreamContainer.Uri.ToString());
 
             if (await EventStreamContainer.CreateIfNotExistsAsync())
             {
-                Console.WriteLine("EventStream Container was not present. Created it");
+                Log.CreatedStorageContainer();
             }
 
             // MinPurgeAge should be at least MinPurgeAgeCap
             MinPurgeAge = MinPurgeAge > MinPurgeAgeCap ? MinPurgeAge : MinPurgeAgeCap;
-            Console.WriteLine("(Capped) Min Purge Age is {0}", MinPurgeAge);
+            Log.MinPurgeAge(MinPurgeAge.ToString());
 
             // MaxPurgeRecords should be less than MaxRecordsCap
             MaxPurgeRecords = Math.Min(MaxPurgeRecords, MaxRecordsCap);
-            Console.WriteLine("(Capped) Max Purge Records is {0}", MaxPurgeRecords);
+            Log.MaxPurgeRecords(MaxPurgeRecords);
 
             // MaxUpdateRecords should be less than MaxRecordsCap
             MaxUpdateRecords = Math.Min(MaxUpdateRecords, MaxRecordsCap);
-            Console.WriteLine("(Capped) Max Update Records is {0}", MaxUpdateRecords);
+            Log.MaxUpdateRecords(MaxUpdateRecords);
 
             using (var connection = await cstr.ConnectTo())
             {
-                Console.WriteLine("Connected to database in {0}/{1} obtained: {2}", connection.DataSource, connection.Database, connection.ClientConnectionId);
-                Console.WriteLine("Started Purging assertions");
+                Log.ConnectedToDatabase(connection.DataSource, connection.Database, connection.ClientConnectionId);
+                Log.PurgingAssertionsStarted();
                 await PurgeAssertions(connection);
-                Console.WriteLine("Completed Purging assertions");
-                Console.WriteLine("Started Detecting changes");
+                Log.PurgingAssertionsCompleted();
+                Log.DetectingChangesStarted();
                 await DetectChanges(connection);
-                Console.WriteLine("Completed Detecting changes");
+                Log.DetectingChangesCompleted();
             }
             return Complete();
         }
@@ -160,25 +161,25 @@ namespace NuGet.Services.Work.Jobs
         private async Task PurgeAssertions(SqlConnection connection)
         {
             var purgeCutoffDateTime = DateTime.UtcNow - MinPurgeAge;
-            Console.WriteLine("Purge Cutoff DateTime : {0}", purgeCutoffDateTime);
+            Log.PurgeCutoffDateTime(purgeCutoffDateTime);
             await PurgeAssertions(connection, purgeCutoffDateTime, MetadataEventStreamSQLQueries.CountPackageAssertionsToPurgeQuery, MetadataEventStreamSQLQueries.PurgePackageAssertionsQuery);
             await PurgeAssertions(connection, purgeCutoffDateTime, MetadataEventStreamSQLQueries.CountPackageOwnerAssertionsToPurgeQuery, MetadataEventStreamSQLQueries.PurgePackageOwnerAssertionsQuery);
         }
 
         private async Task PurgeAssertions(SqlConnection connection, DateTime purgeCutoffDateTime, string countQuery, string purgeQuery)
         {
-            Console.WriteLine("Querying the number of assertions to purge...");
+            Log.QueryPurgeAssertionsCount();
             var results = await connection.QueryAsync<int>(countQuery, new { PurgeCutoffDateTime = purgeCutoffDateTime });
             var count = results.Single();
             if (count > 0)
             {
-                Console.WriteLine("Started Purging {0} assertions", count);
+                Log.PurgeAssertionsStart(count);
                 await connection.QueryAsync<int>(purgeQuery, new { MaxPurgeRecords = MaxPurgeRecords, PurgeCutoffDateTime = purgeCutoffDateTime });
-                Console.WriteLine("Completed purging assertions");
+                Log.PurgeAssertionsEnd();
             }
             else
             {
-                Console.WriteLine("No records to purge");
+                Log.NoPurging();
             }
         }
 
@@ -186,22 +187,26 @@ namespace NuGet.Services.Work.Jobs
         {
             JObject json = null;
 
-            Console.WriteLine("Querying multiple queries...");
+            Log.MultipleQueryStart();
             var results = connection.QueryMultiple(MetadataEventStreamSQLQueries.GetAssertionsQuery, new { MaxRecords = MaxUpdateRecords });
-            Console.WriteLine("Completed multiple queries.");
+            Log.MultipleQueryEnd();
 
-            Console.WriteLine("Extracting packageassertions and owner assertions...");
-            var packageAssertions = results.Read<PackageAssertionSet>();
-            var packageOwnerAssertions = results.Read<PackageOwnerAssertion>();
+            Log.ExtractingAssertions();
+            var packageAssertions = results.Read<PackageAssertionSet>().ToList();
+            var packageOwnerAssertions = results.Read<PackageOwnerAssertion>().ToList();
+
+            Log.ExtractedPackageAssertions(packageAssertions.Count);
+            Log.ExtractedPackageOwnerAssertions(packageOwnerAssertions.Count);
 
             // Extract the assertions as JArray
-            Debug.Assert(packageAssertions.Count() <= MaxUpdateRecords);
-            Debug.Assert(packageOwnerAssertions.Count() <= MaxUpdateRecords);
+            Debug.Assert(packageAssertions.Count <= MaxUpdateRecords);
+            Debug.Assert(packageOwnerAssertions.Count <= MaxUpdateRecords);
             var jArrayAssertions = GetJArrayAssertions(packageAssertions, packageOwnerAssertions);
 
             if (jArrayAssertions.Count > 0)
             {
                 var timeStamp = DateTime.UtcNow;
+                Log.Timestamp(timeStamp);
                 var indexJSONBlob = EventStreamContainer.GetBlockBlobReference(IndexJson);
 
                 JObject indexJSON = await GetJSON(indexJSONBlob) ?? (JObject)EmptyIndexJSON.DeepClone();
@@ -210,31 +215,21 @@ namespace NuGet.Services.Work.Jobs
                 json = GetJObject(jArrayAssertions, timeStamp, indexJSON);
 
                 var blobName = GetBlobName(timeStamp);
+                Log.BlobName(blobName);
 
-                // Write the blob. Update indexJSON blob and previous latest Blob
+                // Write the blob. Update indexJSON blob and previous newest Blob
                 await DumpJSON(json, blobName, timeStamp, indexJSON, indexJSONBlob);
 
                 if (UpdateTables)
                 {
+                    Log.UpdateTables();
                     // Mark assertions as processed
                     await MarkAssertionsAsProcessed(connection, packageAssertions, packageOwnerAssertions);
-                }
-                else
-                {
-                    Console.WriteLine("Not Updating tables...");
                 }
             }
             else
             {
-                Console.WriteLine("No Assertions to make");
-                if (UpdateTables)
-                {
-                    Console.WriteLine("And, not updating tables");
-                }
-                else
-                {
-                    Console.WriteLine("Not updating tables anyways...");
-                }
+                Log.NoAssertions();
             }
 
             return json;
@@ -249,7 +244,7 @@ namespace NuGet.Services.Work.Jobs
         /// Gets the assertions as JArray from the packageAssertions and packageOwnerAssertions queried from the database
         /// This can be tested separately to verify that the right jArray of assertions are created using mocked assertions
         /// </summary>
-        public static JArray GetJArrayAssertions(IEnumerable<PackageAssertionSet> packageAssertions, IEnumerable<PackageOwnerAssertion> packageOwnerAssertions, string nupkgUrlFormat)
+        public JArray GetJArrayAssertions(IEnumerable<PackageAssertionSet> packageAssertions, IEnumerable<PackageOwnerAssertion> packageOwnerAssertions, string nupkgUrlFormat)
         {
             // For every package assertion entry, create an entry in a simple dictionary of (<packageId, packageVersion>, IPackageAssertion)
             var packagesAndOwners = new Dictionary<Tuple<string, string>, IAssertionSet>();
@@ -292,7 +287,7 @@ namespace NuGet.Services.Work.Jobs
 
                 if (!assertionSet.Owners.Add(packageOwnerAssertion))
                 {
-                    Console.WriteLine("PackageOwnerAssertion already exists");
+                    Log.PackageOwnerAssertionAlreadyExists();
                 }
             }
 
@@ -302,7 +297,7 @@ namespace NuGet.Services.Work.Jobs
             return JArray.Parse(json);
         }
 
-        private static async Task<JObject> GetJSON(CloudBlockBlob blob)
+        private async Task<JObject> GetJSON(CloudBlockBlob blob)
         {
             if (await blob.ExistsAsync())
             {
@@ -313,7 +308,7 @@ namespace NuGet.Services.Work.Jobs
                 }
                 catch (StorageException ex)
                 {
-                    Console.WriteLine("Azure Storage Exception : " + ex.ToString());
+                    Log.AzureStorageException(ex.ToString());
                 }
             }
             return null;
@@ -323,7 +318,7 @@ namespace NuGet.Services.Work.Jobs
         /// Gets the final JObject given the assertions as jArray, timeStamp and indexJSON
         /// This can be tested separately to verify that the index is used and updated correctly using a mocked indexJSON JObject
         /// </summary>
-        public static JObject GetJObject(JArray jArrayAssertions, DateTime timeStamp, JObject indexJSON)
+        public JObject GetJObject(JArray jArrayAssertions, DateTime timeStamp, JObject indexJSON)
         {
             var json = new JObject();
             json.Add(EventTimeStamp, timeStamp);
@@ -338,7 +333,7 @@ namespace NuGet.Services.Work.Jobs
                 {
                     throw new ArgumentException("indexJSON does not have a token 'newest'");
                 }
-                Console.WriteLine("Event newest in empty index json is :" + eventOlder.ToString());
+                Log.EventNewestInCurrentIndex(eventOlder.ToString());
                 json.Add(EventOlder, eventOlder.Type == JTokenType.Null ? EventNull : GetRelativePathToEvent(eventOlder.ToString()));
             }
             json.Add(EventNewer, EventNull);
@@ -379,11 +374,16 @@ namespace NuGet.Services.Work.Jobs
         /// <summary>
         /// Dumps the JSON containing the assertion set onto blob storage
         /// </summary>
-        public static async Task DumpJSON(JObject json, string blobName, DateTime timeStamp, JObject indexJSON, CloudBlockBlob indexJSONBlob, CloudBlobContainer eventsContainer, bool pushToCloud)
+        public async Task DumpJSON(JObject json, string blobName, DateTime timeStamp, JObject indexJSON, CloudBlockBlob indexJSONBlob, CloudBlobContainer eventsContainer, bool pushToCloud)
         {
             if (json == null)
             {
                 throw new ArgumentNullException("json");
+            }
+
+            if(blobName == null)
+            {
+                throw new ArgumentNullException("blobName");
             }
 
             if (indexJSON == null)
@@ -391,21 +391,19 @@ namespace NuGet.Services.Work.Jobs
                 throw new ArgumentNullException("indexJSON");
             }
 
-            Console.WriteLine("BlobName: {0}\n", blobName);
-
-            Console.WriteLine("index.json PREVIOUS: \n" + indexJSON.ToString());
+            Log.PreviousIndexJSON(indexJSON.ToString());
 
             string oldestBlobName = null;
-            string previousLatestBlobName = null;
+            string previousNewestBlobName = null;
             oldestBlobName = indexJSON.SelectToken(EventOldest).ToString();
-            previousLatestBlobName = indexJSON.SelectToken(EventNewest).ToString();
+            previousNewestBlobName = indexJSON.SelectToken(EventNewest).ToString();
 
-            // Update the previous latest block
-            if (String.IsNullOrEmpty(previousLatestBlobName))
+            // Update the previous newest blob
+            if (String.IsNullOrEmpty(previousNewestBlobName))
             {
                 if (!String.IsNullOrEmpty(oldestBlobName))
                 {
-                    Console.WriteLine("WARNING: OldestBlobName is not empty when newestBlobName is. Something went wrong somewhere!!!");
+                    Log.NewestEmptyWhileOldestIsNot();
                 }
                 // Both the oldest and newest event blob names are empty
                 // Set the oldest now
@@ -421,31 +419,31 @@ namespace NuGet.Services.Work.Jobs
                 {
                     throw new ArgumentNullException("eventsContainer");
                 }
-                Console.WriteLine("Dumping to {0}", blobName);
-                var latestBlob = eventsContainer.GetBlockBlobReference(blobName);
+                Log.BlobName(blobName);
+                var newestBlob = eventsContainer.GetBlockBlobReference(blobName);
 
                 // First upload the created block
                 using (var stream = new MemoryStream(Encoding.Default.GetBytes(json.ToString()), false))
                 {
-                    await latestBlob.UploadFromStreamAsync(stream);
+                    await newestBlob.UploadFromStreamAsync(stream);
                 }
 
-                if (!String.IsNullOrEmpty(previousLatestBlobName))
+                if (!String.IsNullOrEmpty(previousNewestBlobName))
                 {
-                    CloudBlockBlob previousLatestBlob = eventsContainer.GetBlockBlobReference(previousLatestBlobName);
-                    JObject previousLatestJSON = await GetJSON(previousLatestBlob);
-                    if (previousLatestJSON == null)
+                    CloudBlockBlob previousNewestBlob = eventsContainer.GetBlockBlobReference(previousNewestBlobName);
+                    JObject previousNewestJSON = await GetJSON(previousNewestBlob);
+                    if (previousNewestJSON == null)
                     {
-                        throw new InvalidOperationException("Previous latest blob does not exist");
+                        throw new InvalidOperationException("Previous newest blob does not exist");
                     }
 
-                    previousLatestJSON[EventNewer] = GetRelativePathToEvent(blobName);
+                    previousNewestJSON[EventNewer] = GetRelativePathToEvent(blobName);
                     // Finally, upload the index block
-                    using (var stream = new MemoryStream(Encoding.Default.GetBytes(previousLatestJSON.ToString()), false))
+                    using (var stream = new MemoryStream(Encoding.Default.GetBytes(previousNewestJSON.ToString()), false))
                     {
-                        await previousLatestBlob.UploadFromStreamAsync(stream);
+                        await previousNewestBlob.UploadFromStreamAsync(stream);
                     }
-                    Console.WriteLine("Previous Latest Blob: \n" + previousLatestJSON.ToString());
+                    Log.PreviousNewestBlob(previousNewestBlob.Uri.ToString());
                 }
 
                 // Finally, upload the index block
@@ -453,13 +451,10 @@ namespace NuGet.Services.Work.Jobs
                 {
                     await indexJSONBlob.UploadFromStreamAsync(stream);
                 }
+
+                Log.NewestBlob(newestBlob.Uri.ToString());
             }
-            else
-            {
-                Console.WriteLine("Not Dumping to cloud...\n");
-            }
-            Console.WriteLine(json);
-            Console.WriteLine("index.json NEW: \n" + indexJSON.ToString());
+            Log.NewIndexJSON(indexJSON.ToString());
         }
 
         private static async Task MarkAssertionsAsProcessed(SqlConnection connection, IEnumerable<PackageAssertionSet> packageAssertions,
@@ -487,5 +482,203 @@ namespace NuGet.Services.Work.Jobs
             Level = EventLevel.Informational,
             Message = "Will look for changes in {0}/{1}")]
         public void SourceDatabase(string server, string database) { WriteEvent(1, server, database); }
+
+		[Event(
+            eventId: 2,
+            Level = EventLevel.Informational,
+            Message = "Will push the events to {0} ")]
+        public void TargetStorageContainer(string eventStreamContainerUri) { WriteEvent(2, eventStreamContainerUri); }
+        
+		[Event(
+            eventId: 3,
+            Level = EventLevel.Informational,
+            Message = "EventStream Container was not present. Created it")]
+        public void CreatedStorageContainer() { WriteEvent(3); }
+        
+		[Event(
+            eventId: 4,
+            Level = EventLevel.Informational,
+            Message = "(Capped) Min Purge Age is {0}")]
+        public void MinPurgeAge(string minPurgeAge) { WriteEvent(4, minPurgeAge); }
+        
+		[Event(
+            eventId: 34,
+            Level = EventLevel.Informational,
+            Message = "(Capped) Max Purge Records is {0}")]
+        public void MaxPurgeRecords(int maxPurgeRecords) { WriteEvent(34, maxPurgeRecords); }
+        
+		[Event(
+            eventId: 5,
+            Level = EventLevel.Informational,
+            Message = "(Capped) Max Update Records is {0}")]
+        public void MaxUpdateRecords(int maxUpdateRecords) { WriteEvent(5, maxUpdateRecords); }
+        
+		[Event(
+            eventId: 6,
+            Level = EventLevel.Informational,
+            Message = "Connected to database in {0}/{1} obtained: {2}")]
+        public void ConnectedToDatabase(string server, string database, Guid clientConnectionId) { WriteEvent(6, server, database, clientConnectionId); }
+        
+		[Event(
+            eventId: 7,
+            Level = EventLevel.Informational,
+            Message = "Started Purging assertions")]
+        public void PurgingAssertionsStarted() { WriteEvent(7); }
+        
+		[Event(
+            eventId: 8,
+            Level = EventLevel.Informational,
+            Message = "Completed Purging assertions")]
+        public void PurgingAssertionsCompleted() { WriteEvent(8); }
+        
+		[Event(
+            eventId: 9,
+            Level = EventLevel.Informational,
+            Message = "Started Detecting changes")]
+        public void DetectingChangesStarted() { WriteEvent(9); }
+        
+		[Event(
+            eventId: 10,
+            Level = EventLevel.Informational,
+            Message = "Completed Detecting changes")]
+        public void DetectingChangesCompleted() { WriteEvent(10); }
+        
+		[Event(
+            eventId: 11,
+            Level = EventLevel.Informational,
+            Message = "Purge Cutoff DateTime : {0}")]
+        public void PurgeCutoffDateTime(DateTime purgeCutoffDateTime) { WriteEvent(11, purgeCutoffDateTime); }
+        
+		[Event(
+            eventId: 12,
+            Level = EventLevel.Informational,
+            Message = "Querying the number of assertions to purge...")]
+        public void QueryPurgeAssertionsCount() { WriteEvent(12); }
+        
+		[Event(
+            eventId: 13,
+            Level = EventLevel.Informational,
+            Message = "Started Purging {0} assertions")]
+        public void PurgeAssertionsStart(int count) { WriteEvent(13, count); }
+        
+		[Event(
+            eventId: 14,
+            Level = EventLevel.Informational,
+            Message = "Completed purging assertions")]
+        public void PurgeAssertionsEnd() { WriteEvent(14); }
+        
+		[Event(
+            eventId: 15,
+            Level = EventLevel.Informational,
+            Message = "No records to purge")]
+        public void NoPurging() { WriteEvent(15); }
+        
+		[Event(
+            eventId: 16,
+            Level = EventLevel.Informational,
+            Message = "Querying multiple queries...")]
+        public void MultipleQueryStart() { WriteEvent(16); }
+        
+		[Event(
+            eventId: 17,
+            Level = EventLevel.Informational,
+            Message = "Completed multiple queries.")]
+        public void MultipleQueryEnd() { WriteEvent(17); }
+        
+		[Event(
+            eventId: 18,
+            Level = EventLevel.Informational,
+            Message = "Extracting packageassertions and owner assertions...")]
+        public void ExtractingAssertions() { WriteEvent(18); }
+        
+		[Event(
+            eventId: 19,
+            Level = EventLevel.Informational,
+            Message = "Extracted {0} package assertions")]
+        public void ExtractedPackageAssertions(int count) { WriteEvent(19, count); }
+        
+		[Event(
+            eventId: 20,
+            Level = EventLevel.Informational,
+            Message = "Extracted {0} package owner assertions")]
+        public void ExtractedPackageOwnerAssertions(int count) { WriteEvent(20, count); }
+        
+		[Event(
+            eventId: 21,
+            Level = EventLevel.Informational,
+            Message = "Timestamp for the blob : {0}")]
+        public void Timestamp(DateTime timeStamp) { WriteEvent(21, timeStamp); }
+        
+		[Event(
+            eventId: 22,
+            Level = EventLevel.Informational,
+            Message = "Blobname is {0}")]
+        public void BlobName(string blobName) { WriteEvent(22, blobName); }
+        
+		[Event(
+            eventId: 23,
+            Level = EventLevel.Informational,
+            Message = "Updating tables to mark assertions as processed")]
+        public void UpdateTables() { WriteEvent(23); }
+        
+		[Event(
+            eventId: 24,
+            Level = EventLevel.Informational,
+            Message = "No Assertions to make")]
+        public void NoAssertions() { WriteEvent(24); }
+        
+		[Event(
+            eventId: 25,
+            Level = EventLevel.Informational,
+            Message = "PackageOwnerAssertion already exists")]
+        public void PackageOwnerAssertionAlreadyExists() { WriteEvent(25); }
+        
+		[Event(
+            eventId: 26,
+            Level = EventLevel.Informational,
+            Message = "Azure Storage Exception : {0}")]
+        public void AzureStorageException(string message) { WriteEvent(26, message); }
+        
+		[Event(
+            eventId: 27,
+            Level = EventLevel.Informational,
+            Message = "Event newest in previous index json is : {0}")]
+        public void EventNewestInCurrentIndex(string eventNewest) { WriteEvent(27, eventNewest); }
+        
+		[Event(
+            eventId: 28,
+            Level = EventLevel.Informational,
+            Message = "index.json PREVIOUS: '{0}' ")]
+        public void PreviousIndexJSON(string previousIndexJSON) { WriteEvent(28, previousIndexJSON); }
+        
+		[Event(
+            eventId: 29,
+            Level = EventLevel.Warning,
+            Message = "WARNING: OldestBlobName is not empty when newestBlobName is. Something went wrong somewhere!!!")]
+        public void NewestEmptyWhileOldestIsNot() { WriteEvent(29); }
+        
+		[Event(
+            eventId: 30,
+            Level = EventLevel.Informational,
+            Message = "Writing to blob {0}")]
+        public void WritingToBlob(string blobName) { WriteEvent(30, blobName); }
+        
+		[Event(
+            eventId: 31,
+            Level = EventLevel.Informational,
+            Message = "Previous Newest Blob: '{0}'")]
+        public void PreviousNewestBlob(string previousNewestBlob) { WriteEvent(31, previousNewestBlob); }
+
+        [Event(
+            eventId: 32,
+            Level = EventLevel.Informational,
+            Message = "Newest Blob: '{0}'")]
+        public void NewestBlob(string newestBlob) { WriteEvent(32, newestBlob); }
+
+		[Event(
+            eventId: 33,
+            Level = EventLevel.Informational,
+            Message = "index.json NEW: '{0}'")]
+        public void NewIndexJSON(string newIndexJSON) { WriteEvent(33, newIndexJSON); }
     }
 }

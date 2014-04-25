@@ -8,6 +8,11 @@ namespace MetadataClient
 {
     public class MetadataEventStreamJobFacts
     {
+        private MetadataEventStreamJob GetMetadataEventStreamJob()
+        {
+            return new MetadataEventStreamJob(new NuGet.Services.Configuration.ConfigurationHub(new Dictionary<string, string>()));
+        }
+
         [Fact]
         public void AddPackageAssertions()
         {
@@ -41,7 +46,7 @@ namespace MetadataClient
 ]");
 
             // Act
-            var actualAssertionsArray = MetadataEventStreamJob.GetJArrayAssertions(packageAssertions, packageOwnerAssertions, @"http://www.nuget.org/api/v2/package/{0}/{1}");
+            var actualAssertionsArray = GetMetadataEventStreamJob().GetJArrayAssertions(packageAssertions, packageOwnerAssertions, @"http://www.nuget.org/api/v2/package/{0}/{1}");
 
             // Arrange
             Assert.Equal(expectedAssertionsArray, actualAssertionsArray);
@@ -71,7 +76,7 @@ namespace MetadataClient
 ]");
 
             // Act
-            var actualAssertionsArray = MetadataEventStreamJob.GetJArrayAssertions(packageAssertions, packageOwnerAssertions, @"http://www.nuget.org/api/v2/package/{0}/{1}");
+            var actualAssertionsArray = GetMetadataEventStreamJob().GetJArrayAssertions(packageAssertions, packageOwnerAssertions, @"http://www.nuget.org/api/v2/package/{0}/{1}");
 
             // Arrange
             Assert.Equal(expectedAssertionsArray, actualAssertionsArray);
@@ -104,7 +109,7 @@ namespace MetadataClient
 ]");
 
             // Act
-            var actualAssertionsArray = MetadataEventStreamJob.GetJArrayAssertions(packageAssertions, packageOwnerAssertions, null);
+            var actualAssertionsArray = GetMetadataEventStreamJob().GetJArrayAssertions(packageAssertions, packageOwnerAssertions, null);
 
             // Arrange
             Assert.Equal(expectedAssertionsArray, actualAssertionsArray);
@@ -128,7 +133,7 @@ namespace MetadataClient
 ]");
 
             // Act
-            var actualAssertionsArray = MetadataEventStreamJob.GetJArrayAssertions(packageAssertions, packageOwnerAssertions, null);
+            var actualAssertionsArray = GetMetadataEventStreamJob().GetJArrayAssertions(packageAssertions, packageOwnerAssertions, null);
 
             // Arrange
             Assert.Equal(expectedAssertionsArray, actualAssertionsArray);
@@ -155,7 +160,7 @@ namespace MetadataClient
   }
 ]");
             // Act
-            var actualAssertionsArray = MetadataEventStreamJob.GetJArrayAssertions(packageAssertions, packageOwnerAssertions, null);
+            var actualAssertionsArray = GetMetadataEventStreamJob().GetJArrayAssertions(packageAssertions, packageOwnerAssertions, null);
 
             // Arrange
             Assert.Equal(expectedAssertionsArray, actualAssertionsArray);
@@ -182,7 +187,7 @@ namespace MetadataClient
 ]");
 
             // Act
-            var actualAssertionsArray = MetadataEventStreamJob.GetJArrayAssertions(packageAssertions, packageOwnerAssertions, null);
+            var actualAssertionsArray = GetMetadataEventStreamJob().GetJArrayAssertions(packageAssertions, packageOwnerAssertions, null);
 
             // Arrange
             Assert.Equal(expectedAssertionsArray, actualAssertionsArray);
@@ -215,7 +220,7 @@ namespace MetadataClient
   }
 ]");
             // Act
-            var actualAssertionsArray = MetadataEventStreamJob.GetJArrayAssertions(packageAssertions, packageOwnerAssertions, null);
+            var actualAssertionsArray = GetMetadataEventStreamJob().GetJArrayAssertions(packageAssertions, packageOwnerAssertions, null);
 
             // Arrange
             Assert.Equal(expectedAssertionsArray, actualAssertionsArray);
@@ -249,7 +254,7 @@ namespace MetadataClient
   }
 ]");
             // Act
-            var actualAssertionsArray = MetadataEventStreamJob.GetJArrayAssertions(packageAssertions, packageOwnerAssertions, null);
+            var actualAssertionsArray = GetMetadataEventStreamJob().GetJArrayAssertions(packageAssertions, packageOwnerAssertions, null);
 
             // Arrange
             Assert.Equal(expectedAssertionsArray, actualAssertionsArray);
@@ -279,7 +284,7 @@ namespace MetadataClient
   }
 ]");
             // Act
-            var actualAssertionsArray = MetadataEventStreamJob.GetJArrayAssertions(packageAssertions, packageOwnerAssertions, null);
+            var actualAssertionsArray = GetMetadataEventStreamJob().GetJArrayAssertions(packageAssertions, packageOwnerAssertions, null);
 
             // Arrange
             Assert.Equal(expectedAssertionsArray, actualAssertionsArray);
@@ -306,7 +311,7 @@ namespace MetadataClient
 }");
 
             // Act
-            var actualJObject = MetadataEventStreamJob.GetJObject(jArrayAssertions, timeStamp, indexJSON);
+            var actualJObject = GetMetadataEventStreamJob().GetJObject(jArrayAssertions, timeStamp, indexJSON);
 
             // Assert
             Assert.Equal(expectedJObject, actualJObject);
@@ -330,7 +335,7 @@ namespace MetadataClient
 }");
 
             // Act
-            var actualJObject = MetadataEventStreamJob.GetJObject(jArrayAssertions, timeStamp, indexJSON);
+            var actualJObject = GetMetadataEventStreamJob().GetJObject(jArrayAssertions, timeStamp, indexJSON);
 
             // Assert
             Assert.Equal(expectedJObject, actualJObject);
@@ -350,10 +355,10 @@ namespace MetadataClient
 }");
 
             // Act
-            var jObject = MetadataEventStreamJob.GetJObject(jArrayAssertions, timeStamp, indexJSON);
+            var jObject = GetMetadataEventStreamJob().GetJObject(jArrayAssertions, timeStamp, indexJSON);
 
             // Act
-            MetadataEventStreamJob.DumpJSON(jObject, MetadataEventStreamJob.GetBlobName(timeStamp), timeStamp, indexJSON, null, null, false).Wait();
+            GetMetadataEventStreamJob().DumpJSON(jObject, MetadataEventStreamJob.GetBlobName(timeStamp), timeStamp, indexJSON, null, null, false).Wait();
 
             // Assert
             Assert.Equal(expectedJObject, indexJSON);
@@ -378,10 +383,10 @@ namespace MetadataClient
 }");
 
             // Act
-            var jObject = MetadataEventStreamJob.GetJObject(jArrayAssertions, timeStamp, indexJSON);
+            var jObject = GetMetadataEventStreamJob().GetJObject(jArrayAssertions, timeStamp, indexJSON);
 
             // Act
-            MetadataEventStreamJob.DumpJSON(jObject, MetadataEventStreamJob.GetBlobName(timeStamp), timeStamp, indexJSON, null, null, false).Wait();
+            GetMetadataEventStreamJob().DumpJSON(jObject, MetadataEventStreamJob.GetBlobName(timeStamp), timeStamp, indexJSON, null, null, false).Wait();
 
             // Assert
             Assert.Equal(expectedJObject, indexJSON);
