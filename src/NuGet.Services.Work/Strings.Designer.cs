@@ -61,6 +61,24 @@ namespace NuGet.Services.Work {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Could not find an Azure Management Certificate. Use the &quot;Azure.ManagementCertThumbprint&quot; config setting to specify one..
+        /// </summary>
+        internal static string AzureHub_MissingCertificate {
+            get {
+                return ResourceManager.GetString("AzureHub_MissingCertificate", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Could not identify the Azure Subscription for the current environment. Use the &quot;Azure.SubscriptionId&quot; config setting to specify it..
+        /// </summary>
+        internal static string AzureHub_MissingSubscription {
+            get {
+                return ResourceManager.GetString("AzureHub_MissingSubscription", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Failed to get the Totals from the query -- no records were returned..
         /// </summary>
         internal static string CalculateStatsTotalsJob_NoData {
