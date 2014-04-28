@@ -35,6 +35,8 @@ namespace NuGet.Services.Work.Jobs
         private const string ContentType = "application/json";
 
         // Event constants
+        private const string EventContext = "@context";
+        private const string EventId = "@id";
         private const string EventTimeStamp = "timestamp";
         private const string EventOlder = "older";
         private const string EventNewer = "newer";
@@ -54,12 +56,27 @@ namespace NuGet.Services.Work.Jobs
         /// </summary>
         private static readonly TimeSpan MinPurgeAgeCap = TimeSpan.Parse("1");
         private static readonly JsonSerializerSettings DefaultJsonSerializerSettings = new JsonSerializerSettings() { ContractResolver = new CamelCasePropertyNamesContractResolver() };
+        public static readonly JToken AssertionSetContext = JToken.Parse(@"{
+	'@vocab' : 'http://nuget.org/schema#',
+	'xsd' : 'http://www.w3.org/2001/XMLSchema#',
+	'timeStamp' : { '@type' : 'xsd:dateTime' },
+	'exists' :  { '@type' : 'xsd:boolean' },
+	'listed' :  { '@type' : 'xsd:boolean' },
+	'created' :  { '@type' : 'xsd:dateTime' },
+	'published' :  { '@type' : 'xsd:dateTime' },
+	'lastEdited' :  { '@type' : 'xsd:dateTime' },
+	'assertions' : {
+		'@container': '@set'
+	}
+}");
+
         public static readonly JObject EmptyIndexJSON = JObject.Parse(@"{
   '@context' : {
 	'@vocab' : 'http://nuget.org/schema#',
 	'xsd': 'http://www.w3.org/2001/XMLSchema#',
 	'lastUpdated' : { '@type' : 'xsd:dateTime' }
 	},
+  '@id' : null,
   '" + EventLastUpdated + @"': '',
   '" + EventOldest + @"': null,
   '" + EventNewest + @"': null
@@ -327,6 +344,10 @@ namespace NuGet.Services.Work.Jobs
         public JObject GetJObject(JArray jArrayAssertions, DateTime timeStamp, JObject indexJSON)
         {
             var json = new JObject();
+            json.Add(EventContext, AssertionSetContext);
+            // This will be overwritten with blob URI before pushing to cloud
+            json.Add(EventId, null);
+
             json.Add(EventTimeStamp, timeStamp);
             if (indexJSON == null)
             {
@@ -448,14 +469,22 @@ namespace NuGet.Services.Work.Jobs
 
             indexJSON[EventNewest] = GetJsonLdIRI(blobName);
             indexJSON[EventLastUpdated] = timeStamp;
+            indexJSON[EventId] = null;
             if (pushToCloud)
             {
+                if (indexJSONBlob == null)
+                {
+                    throw new ArgumentNullException("indexJSONBlob");
+                }
                 if (eventsContainer == null)
                 {
                     throw new ArgumentNullException("eventsContainer");
                 }
                 Log.BlobName(blobName);
                 var newestBlob = eventsContainer.GetBlockBlobReference(blobName);
+
+                // Set @id to uri of the blob
+                json[EventId] = newestBlob.Uri.ToString();
 
                 // First upload the created block
                 await Upload(newestBlob, json.ToString(), ContentType);
@@ -474,6 +503,9 @@ namespace NuGet.Services.Work.Jobs
                     await Upload(previousNewestBlob, previousNewestJSON.ToString(), ContentType);
                     Log.PreviousNewestBlob(previousNewestBlob.Uri.ToString());
                 }
+
+                // Set @id to uri of the blob
+                indexJSON[EventId] = indexJSONBlob.Uri.ToString();
 
                 // Finally, upload the index block
                 await Upload(indexJSONBlob, indexJSON.ToString(), ContentType);

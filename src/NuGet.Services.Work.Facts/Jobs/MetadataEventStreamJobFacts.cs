@@ -304,6 +304,8 @@ namespace MetadataClient
             var jArrayAssertions = new JArray();
             var timeStamp = new DateTime(2014, 4, 21, 12, 30, 30, 500);
             var expectedJObject = JObject.Parse(@"{
+  '@context' : " + MetadataEventStreamJob.AssertionSetContext + @",
+  '@id' : null,
   'timestamp': '2014-04-21T12:30:30.5',
   'older': null,
   'newer': null,
@@ -321,6 +323,12 @@ namespace MetadataClient
         public void TestGetJObjectSecondOneOrHigher()
         {
             var indexJSON = JObject.Parse(@"{
+  '@context' : {
+	'@vocab' : 'http://nuget.org/schema#',
+	'xsd': 'http://www.w3.org/2001/XMLSchema#',
+	'lastUpdated' : { '@type' : 'xsd:dateTime' }
+	},
+  '@id' : null,
   'lastupdated': '2014-04-21T12:30:30.5',
   'oldest': { '@id' : '2014/04/21/12-30-30-500Z.json' },
   'newest': { '@id' : '2014/04/21/12-30-30-500Z.json' }
@@ -328,6 +336,8 @@ namespace MetadataClient
             var jArrayAssertions = new JArray();
             var timeStamp = new DateTime(2014, 4, 21, 12, 35, 30, 800);
             var expectedJObject = JObject.Parse(@"{
+  '@context' : " + MetadataEventStreamJob.AssertionSetContext + @",
+  '@id' : null,
   'timestamp': '2014-04-21T12:35:30.8',
   'older': { '@id' : '../../../2014/04/21/12-30-30-500Z.json' },
   'newer': null,
@@ -354,6 +364,7 @@ namespace MetadataClient
 	'xsd': 'http://www.w3.org/2001/XMLSchema#',
 	'lastUpdated' : { '@type' : 'xsd:dateTime' }
 	},
+  '@id' : null,
   'lastupdated': '2014-04-21T12:30:30.5',
   'oldest': { '@id' : '2014/04/21/12-30-30-500Z.json' },
   'newest': { '@id' : '2014/04/21/12-30-30-500Z.json' }
@@ -379,6 +390,7 @@ namespace MetadataClient
 	'xsd': 'http://www.w3.org/2001/XMLSchema#',
 	'lastUpdated' : { '@type' : 'xsd:dateTime' }
 	},
+  '@id' : null,
   'lastupdated': '2014-04-21T12:30:30.5',
   'oldest': { '@id' : '2014/04/21/12-30-30-500Z.json' },
   'newest': { '@id' : '2014/04/21/12-30-30-500Z.json' }
@@ -392,6 +404,7 @@ namespace MetadataClient
 	'xsd': 'http://www.w3.org/2001/XMLSchema#',
 	'lastUpdated' : { '@type' : 'xsd:dateTime' }
 	},
+  '@id' : null,
   'lastupdated': '2014-04-21T12:35:30.8',
   'oldest': { '@id' : '2014/04/21/12-30-30-500Z.json' },
   'newest': { '@id' : '2014/04/21/12-35-30-800Z.json' }
