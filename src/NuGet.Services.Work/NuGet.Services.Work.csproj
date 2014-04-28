@@ -139,6 +139,9 @@
     <Reference Include="Microsoft.WindowsAzure.Diagnostics, Version=2.2.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35">
       <Private>True</Private>
     </Reference>
+    <Reference Include="Microsoft.WindowsAzure.Management.Sql">
+      <HintPath>..\..\packages\Microsoft.WindowsAzure.Management.Sql.0.9.14-preview\lib\net40\Microsoft.WindowsAzure.Management.Sql.dll</HintPath>
+    </Reference>
     <Reference Include="Microsoft.WindowsAzure.ServiceRuntime, Version=2.2.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35">
       <Private>False</Private>
     </Reference>
@@ -256,6 +259,7 @@
     <Compile Include="Infrastructure\InvocationContext.cs" />
     <Compile Include="Infrastructure\UnknownJobException.cs" />
     <Compile Include="JobComponentsModule.cs" />
+    <Compile Include="JobFailureException.cs" />
     <Compile Include="Jobs\AggregateStatisticsJob.cs" />
     <Compile Include="Jobs\BackupPackageBlobsJob.cs" />
     <Compile Include="Jobs\Bases\ReportGeneratingJobBase.cs" />
