@@ -55,6 +55,11 @@ namespace NuGet.Services.Work.Jobs
         private static readonly TimeSpan MinPurgeAgeCap = TimeSpan.Parse("1");
         private static readonly JsonSerializerSettings DefaultJsonSerializerSettings = new JsonSerializerSettings() { ContractResolver = new CamelCasePropertyNamesContractResolver() };
         public static readonly JObject EmptyIndexJSON = JObject.Parse(@"{
+  '@context' : {
+	'@vocab' : 'http://nuget.org/schema#',
+	'xsd': 'http://www.w3.org/2001/XMLSchema#',
+	'lastUpdated' : { '@type' : 'xsd:dateTime' }
+	},
   '" + EventLastUpdated + @"': '',
   '" + EventOldest + @"': null,
   '" + EventNewest + @"': null
@@ -247,7 +252,7 @@ namespace NuGet.Services.Work.Jobs
         /// </summary>
         public JArray GetJArrayAssertions(IEnumerable<PackageAssertionSet> packageAssertions, IEnumerable<PackageOwnerAssertion> packageOwnerAssertions, string nupkgUrlFormat)
         {
-            // For every package assertion entry, create an entry in a simple dictionary of (<packageId, packageVersion>, IPackageAssertion)
+            // For every package assertion entry, create an entry in a simple dictionary of (<packageId, packageVersion>, IAssertionSet)
             var packagesAndOwners = new Dictionary<Tuple<string, string>, IAssertionSet>();
             var ownersOnlyAssertions = new Dictionary<string, IAssertionSet>();
             foreach (var packageAssertion in packageAssertions)
@@ -255,7 +260,7 @@ namespace NuGet.Services.Work.Jobs
                 var key = new Tuple<string, string>(packageAssertion.PackageId, packageAssertion.Version);
                 if (packageAssertion.Exists)
                 {
-                    packageAssertion.Nupkg = GetNupkgUrl(nupkgUrlFormat, packageAssertion.PackageId, packageAssertion.Version);
+                    packageAssertion.Nupkg = GetJsonLdIRI(GetNupkgUrl(nupkgUrlFormat, packageAssertion.PackageId, packageAssertion.Version));
                     packagesAndOwners.Add(key, packageAssertion);
                 }
                 else
@@ -329,13 +334,13 @@ namespace NuGet.Services.Work.Jobs
             }
             else
             {
-                var eventOlder = indexJSON.SelectToken(EventNewest);
+                var eventOlder = SelectJsonLdIRI(indexJSON, EventNewest);
                 if (eventOlder == null)
                 {
                     throw new ArgumentException("indexJSON does not have a token 'newest'");
                 }
                 Log.EventNewestInCurrentIndex(eventOlder.ToString());
-                json.Add(EventOlder, eventOlder.Type == JTokenType.Null ? EventNull : GetRelativePathToEvent(eventOlder.ToString()));
+                json.Add(EventOlder, eventOlder.Type == JTokenType.Null ? EventNull : GetJsonLdIRI(GetRelativePathToEvent(eventOlder.ToString())));
             }
             json.Add(EventNewer, EventNull);
             json.Add(EventAssertions, jArrayAssertions);
@@ -360,6 +365,36 @@ namespace NuGet.Services.Work.Jobs
                 throw new ArgumentNullException("nupkgUrlFormat");
             }
             return String.Format(CultureInfo.InvariantCulture, nupkgUrlFormat, packageId, version);
+        }
+
+        public static JToken GetJsonLdIRI(string url)
+        {
+            if (url == null)
+            {
+                throw new ArgumentNullException("url");
+            }
+            var jsonldIRI = String.Format("{{ '@id' : '{0}' }}", url);
+            var token = JToken.Parse(jsonldIRI);
+            return token;
+        }
+
+        public static JToken SelectJsonLdIRI(JToken token, string propertyName)
+        {
+            var eventToken = token.SelectToken(propertyName);
+            if (eventToken == null)
+            {
+                throw new ArgumentException("propertyName does not exist in token");
+            }
+
+            if (eventToken.Type == JTokenType.Null)
+                return eventToken;
+
+            var iriToken = eventToken.SelectToken("@id");
+            if (iriToken == null)
+            {
+                throw new ArgumentException("propertyName token is not a valid json-ld IRI");
+            }
+            return iriToken;
         }
 
         private static string GetRelativePathToEvent(string eventName)
@@ -396,8 +431,8 @@ namespace NuGet.Services.Work.Jobs
 
             string oldestBlobName = null;
             string previousNewestBlobName = null;
-            oldestBlobName = indexJSON.SelectToken(EventOldest).ToString();
-            previousNewestBlobName = indexJSON.SelectToken(EventNewest).ToString();
+            oldestBlobName = SelectJsonLdIRI(indexJSON, EventOldest).ToString();
+            previousNewestBlobName = SelectJsonLdIRI(indexJSON, EventNewest).ToString();
 
             // Update the previous newest blob
             if (String.IsNullOrEmpty(previousNewestBlobName))
@@ -408,11 +443,10 @@ namespace NuGet.Services.Work.Jobs
                 }
                 // Both the oldest and newest event blob names are empty
                 // Set the oldest now
-                indexJSON[EventOldest] = blobName;
+                indexJSON[EventOldest] = GetJsonLdIRI(blobName);
             }
 
-            // TODO: Should we store the URL instead?
-            indexJSON[EventNewest] = blobName;
+            indexJSON[EventNewest] = GetJsonLdIRI(blobName);
             indexJSON[EventLastUpdated] = timeStamp;
             if (pushToCloud)
             {
@@ -435,7 +469,7 @@ namespace NuGet.Services.Work.Jobs
                         throw new InvalidOperationException("Previous newest blob does not exist");
                     }
 
-                    previousNewestJSON[EventNewer] = GetRelativePathToEvent(blobName);
+                    previousNewestJSON[EventNewer] = GetJsonLdIRI(GetRelativePathToEvent(blobName));
                     // Finally, upload the index block
                     await Upload(previousNewestBlob, previousNewestJSON.ToString(), ContentType);
                     Log.PreviousNewestBlob(previousNewestBlob.Uri.ToString());

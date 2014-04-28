@@ -104,7 +104,7 @@ namespace NuGet.Services.Work.Jobs.Models
         public PackageAssertionSet() { }
         internal PackageAssertionSet(string packageId, string version, bool exists) : base(packageId, version, exists) { }
 
-        internal PackageAssertionSet(string packageId, string version, bool exists, string nupkg, bool listed, DateTime? created, DateTime? published)
+        internal PackageAssertionSet(string packageId, string version, bool exists, object nupkg, bool listed, DateTime? created, DateTime? published)
             : base(packageId, version, exists)
         {
             Nupkg = nupkg;
@@ -128,7 +128,7 @@ namespace NuGet.Services.Work.Jobs.Models
         [JsonIgnore]
         public DateTime? ProcessedDateTime { get; set; }
 
-        public string Nupkg { get; set; }
+        public object Nupkg { get; set; }
         public bool Listed { get; set; }
         public DateTime? Created { get; set; }
         public DateTime? Published { get; set; }

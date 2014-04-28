@@ -31,7 +31,7 @@ namespace MetadataClient
     'packageId': 'A',
     'version': '1.0.0',
     'exists': true,
-    'nupkg': 'http://www.nuget.org/api/v2/package/A/1.0.0',
+    'nupkg': { '@id' : 'http://www.nuget.org/api/v2/package/A/1.0.0' },
     'listed': true,
     'created': '0001-01-01T00:00:00',
     'published': '0001-01-01T00:00:00',
@@ -67,7 +67,7 @@ namespace MetadataClient
     'packageId': 'A',
     'version': '1.0.0',
     'exists': true,
-    'nupkg': 'http://www.nuget.org/api/v2/package/A/1.0.0',
+    'nupkg': { '@id' : 'http://www.nuget.org/api/v2/package/A/1.0.0' },
     'listed': true,
     'created': '0001-01-01T00:00:00',
     'published': '0001-01-01T00:00:00',
@@ -322,14 +322,14 @@ namespace MetadataClient
         {
             var indexJSON = JObject.Parse(@"{
   'lastupdated': '2014-04-21T12:30:30.5',
-  'oldest': '2014/04/21/12-30-30-500Z.json',
-  'newest': '2014/04/21/12-30-30-500Z.json'
+  'oldest': { '@id' : '2014/04/21/12-30-30-500Z.json' },
+  'newest': { '@id' : '2014/04/21/12-30-30-500Z.json' }
 }");
             var jArrayAssertions = new JArray();
             var timeStamp = new DateTime(2014, 4, 21, 12, 35, 30, 800);
             var expectedJObject = JObject.Parse(@"{
   'timestamp': '2014-04-21T12:35:30.8',
-  'older': '../../../2014/04/21/12-30-30-500Z.json',
+  'older': { '@id' : '../../../2014/04/21/12-30-30-500Z.json' },
   'newer': null,
   'assertions': []
 }");
@@ -349,9 +349,14 @@ namespace MetadataClient
             var jArrayAssertions = new JArray();
             var timeStamp = new DateTime(2014, 4, 21, 12, 30, 30, 500);
             var expectedJObject = JObject.Parse(@"{
+  '@context' : {
+	'@vocab' : 'http://nuget.org/schema#',
+	'xsd': 'http://www.w3.org/2001/XMLSchema#',
+	'lastUpdated' : { '@type' : 'xsd:dateTime' }
+	},
   'lastupdated': '2014-04-21T12:30:30.5',
-  'oldest': '2014/04/21/12-30-30-500Z.json',
-  'newest': '2014/04/21/12-30-30-500Z.json'
+  'oldest': { '@id' : '2014/04/21/12-30-30-500Z.json' },
+  'newest': { '@id' : '2014/04/21/12-30-30-500Z.json' }
 }");
 
             // Act
@@ -369,17 +374,27 @@ namespace MetadataClient
         {
             // Arrange
             var indexJSON = JObject.Parse(@"{
+  '@context' : {
+	'@vocab' : 'http://nuget.org/schema#',
+	'xsd': 'http://www.w3.org/2001/XMLSchema#',
+	'lastUpdated' : { '@type' : 'xsd:dateTime' }
+	},
   'lastupdated': '2014-04-21T12:30:30.5',
-  'oldest': '2014/04/21/12-30-30-500Z.json',
-  'newest': '2014/04/21/12-30-30-500Z.json'
+  'oldest': { '@id' : '2014/04/21/12-30-30-500Z.json' },
+  'newest': { '@id' : '2014/04/21/12-30-30-500Z.json' }
 }");
 
             var jArrayAssertions = new JArray();
             var timeStamp = new DateTime(2014, 4, 21, 12, 35, 30, 800);
             var expectedJObject = JObject.Parse(@"{
+  '@context' : {
+	'@vocab' : 'http://nuget.org/schema#',
+	'xsd': 'http://www.w3.org/2001/XMLSchema#',
+	'lastUpdated' : { '@type' : 'xsd:dateTime' }
+	},
   'lastupdated': '2014-04-21T12:35:30.8',
-  'oldest': '2014/04/21/12-30-30-500Z.json',
-  'newest': '2014/04/21/12-35-30-800Z.json'
+  'oldest': { '@id' : '2014/04/21/12-30-30-500Z.json' },
+  'newest': { '@id' : '2014/04/21/12-35-30-800Z.json' }
 }");
 
             // Act
