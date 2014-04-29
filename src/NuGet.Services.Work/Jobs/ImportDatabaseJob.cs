@@ -1,9 +1,4 @@
-﻿using Microsoft.WindowsAzure.Storage;
-using Microsoft.WindowsAzure.Storage.Auth;
-using Microsoft.WindowsAzure.Storage.Blob;
-using NuGet.Services.Configuration;
-using NuGet.Services.Work.Jobs.Models;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.SqlClient;
@@ -11,6 +6,12 @@ using System.Diagnostics.Tracing;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Dapper;
+using Microsoft.WindowsAzure.Storage;
+using Microsoft.WindowsAzure.Storage.Auth;
+using Microsoft.WindowsAzure.Storage.Blob;
+using NuGet.Services.Configuration;
+using NuGet.Services.Work.Jobs.Models;
 
 namespace NuGet.Services.Work.Jobs
 {
@@ -18,6 +19,9 @@ namespace NuGet.Services.Work.Jobs
     public class ImportDatabaseJob : DatabaseJobHandlerBase<ImportDatabaseEventSource>
     {
         public static readonly string BackupPrefix = "Backup";
+        private const string RenameDatabase = @"ALTER DATABASE [{0}] MODIFY NAME = [{1}]";
+        private const string DefaultGalleryDBName = "NuGetGallery";
+        private const string TempBackupName = "TempBackup";
         public string SourceStorageAccountName { get; set; }
 
         public string SourceStorageAccountKey { get; set; }
@@ -27,6 +31,8 @@ namespace NuGet.Services.Work.Jobs
         public string RequestGUID { get; set; }
 
         public string EndPointUri { get; set; }
+
+        public string GalleryDBName { get; set; }
 
         public ImportDatabaseJob(ConfigurationHub configHub) : base(configHub) { }
 
@@ -48,6 +54,7 @@ namespace NuGet.Services.Work.Jobs
             }
 
             cstr.TrimNetworkProtocol();
+            Log.PreparingToImport(cstr.ToString());
 
             if (SourceStorageAccountName == null && SourceStorageAccountKey == null)
             {
@@ -85,6 +92,8 @@ namespace NuGet.Services.Work.Jobs
             if (await DoesDBExist(cstr, TargetDatabaseName))
             {
                 Log.DatabaseAlreadyExists("Database {0} already exists.Skipping...", TargetDatabaseName);
+                TargetDatabaseConnection = cstr;
+                await RenameImportedDBToGalleryDB();
                 return Complete();
             }
 
@@ -112,6 +121,7 @@ namespace NuGet.Services.Work.Jobs
                 parameters["RequestGUID"] = requestGUID;
                 parameters["TargetDatabaseConnection"] = cstr.ConnectionString;
                 parameters["EndPointUri"] = endPointUri;
+                parameters["TargetDatabaseName"] = TargetDatabaseName;
 
                 return Suspend(TimeSpan.FromMinutes(5), parameters);
             }
@@ -121,9 +131,9 @@ namespace NuGet.Services.Work.Jobs
             }
         }
 
-        protected internal override Task<JobContinuation> Resume()
+        protected internal override async Task<JobContinuation> Resume()
         {
-            if (RequestGUID == null || TargetDatabaseConnection == null || EndPointUri == null)
+            if (RequestGUID == null || TargetDatabaseConnection == null || EndPointUri == null || TargetDatabaseName == null)
             {
                 throw new ArgumentNullException("Job could not resume properly due to incorrect parameters");
             }
@@ -135,6 +145,7 @@ namespace NuGet.Services.Work.Jobs
                 ServerName = TargetDatabaseConnection.DataSource,
                 UserName = TargetDatabaseConnection.UserID,
                 Password = TargetDatabaseConnection.Password,
+                DatabaseName = TargetDatabaseName,
             };
 
             var statusInfoList = helper.CheckRequestStatus(RequestGUID);
@@ -149,7 +160,8 @@ namespace NuGet.Services.Work.Jobs
             if (statusInfo.Status == "Completed")
             {
                 Log.ImportCompleted(statusInfo.DatabaseName, helper.ServerName);
-                return Task.FromResult(Complete());
+                await RenameImportedDBToGalleryDB();
+                return Complete();
             }
 
             Log.Importing(statusInfo.Status);
@@ -158,7 +170,8 @@ namespace NuGet.Services.Work.Jobs
             parameters["RequestGUID"] = RequestGUID;
             parameters["TargetDatabaseConnection"] = TargetDatabaseConnection.ConnectionString;
             parameters["EndPointUri"] = endPointUri;
-            return Task.FromResult(Suspend(TimeSpan.FromMinutes(5), parameters));
+            parameters["TargetDatabaseName"] = TargetDatabaseName;
+            return Suspend(TimeSpan.FromMinutes(5), parameters);
         }
 
         private string GetLatestBackupBacpacFile(CloudBlobClient cloudBlobClient)
@@ -203,6 +216,69 @@ namespace NuGet.Services.Work.Jobs
                 return db != null;
             }
         }
+
+        private async Task RenameImportedDBToGalleryDB()
+        {
+            var cstr = TargetDatabaseConnection;
+            if (cstr == null || cstr.InitialCatalog == null || cstr.Password == null || cstr.DataSource == null || cstr.UserID == null)
+            {
+                throw new ArgumentNullException("One of the connection string parameters or the string itself is null");
+            }
+
+            cstr.TrimNetworkProtocol();
+            Log.PreparingToRename(cstr.DataSource); // EventId: 1
+
+            if (String.IsNullOrEmpty(GalleryDBName))
+            {
+                GalleryDBName = DefaultGalleryDBName;
+            }
+            Log.GalleryDBName(GalleryDBName); // EventId: 2
+
+            using (SqlConnection connection = await cstr.ConnectToMaster())
+            {
+                Log.ConnectedToMaster();  // EventId: 4
+
+                var backupDatabase = await GetDatabase(connection, TargetDatabaseName);
+                if (backupDatabase == null)
+                {
+                    throw new ArgumentException("Backup Database not found");
+                }
+
+                var backupName = backupDatabase.name;
+                Log.BackupName(backupName);  // EventId: 5
+
+                var galleryDatabase = await GetDatabase(connection, GalleryDBName);
+                if (galleryDatabase == null)
+                {
+                    Log.GalleryDatabaseNotFound(GalleryDBName);  // EventId: 6
+                    // NO Gallery Database was found. This is BAD
+                    // Simply rename latest backup database to GalleryDatabase and bail
+                    await connection.ExecuteAsync(String.Format(RenameDatabase, backupName, GalleryDBName));
+                    return;
+                }
+
+                // If Gallery Database was found and latest backup was available
+                // Check if GalleryDatabase is newer than latest backup
+                // If so, ignore. Otherwise, Rename
+                if (backupDatabase.create_date > galleryDatabase.create_date)
+                {
+                    Log.RenameNeeded();  // EventId: 7
+                    Log.RenamingBackupToTemp(backupName, TempBackupName); // EventId: 8
+                    await connection.ExecuteAsync(String.Format(RenameDatabase, backupName, TempBackupName));
+                    Log.RenamedBackupToTemp(); // EventId: 9
+                    Log.RenamingNuGetGalleryToBackup(GalleryDBName, backupName); // EventId: 10
+                    await connection.ExecuteAsync(String.Format(RenameDatabase, GalleryDBName, backupName));
+                    Log.RenamedNuGetGalleryToBackup(); // EventId: 11
+                    Log.RenamingTempToNuGetGallery(TempBackupName, GalleryDBName); // EventId: 12
+                    await connection.ExecuteAsync(String.Format(RenameDatabase, TempBackupName, GalleryDBName));
+                    Log.RenamedTempToNuGetGallery(); // EventId: 13
+                }
+                else
+                {
+                    Log.NoRenameNeeded(); // EventId: 14
+                }
+            }
+        }
     }
 
     [EventSource(Name = "Outercurve-NuGet-Jobs-ImportDatabase")]
@@ -221,8 +297,8 @@ namespace NuGet.Services.Work.Jobs
         [Event(
             eventId: 2,
             Level = EventLevel.Informational,
-            Message = "Preparing to import bacpac file {0}")]
-        public void PreparingToImport(string bacpacFile) { WriteEvent(2, bacpacFile); }
+            Message = "Preparing to import to {0}")]
+        public void PreparingToImport(string cstr) { WriteEvent(2, cstr); }
 
         [Event(
             eventId: 3,
@@ -295,5 +371,89 @@ namespace NuGet.Services.Work.Jobs
             Level = EventLevel.Informational,
             Message = "HttpWebResponse error description. Status : {0}")]
         public void ErrorStatusDescription(string statusDescription) { WriteEvent(14, statusDescription); }
+
+        [Event(
+            eventId: 21,
+            Level = EventLevel.Informational,
+            Message = "Preparing to rename databases on '{0}'")]
+        public void PreparingToRename(string server) { WriteEvent(21, server); }
+
+        [Event(
+            eventId: 22,
+            Level = EventLevel.Informational,
+            Message = "Gallery database name is '{0}'")]
+        public void GalleryDBName(string galleryDBName) { WriteEvent(22, galleryDBName); }
+
+        [Event(
+            eventId: 23,
+            Level = EventLevel.Informational,
+            Message = "Backup prefix is '{0}'")]
+        public void BackupPrefix(string backupPrefix) { WriteEvent(23, backupPrefix); }
+
+        [Event(
+            eventId: 24,
+            Level = EventLevel.Informational,
+            Message = "Connected to master")]
+        public void ConnectedToMaster() { WriteEvent(24); }
+
+        [Event(
+            eventId: 25,
+            Level = EventLevel.Informational,
+            Message = "Backup Name is '{0}'")]
+        public void BackupName(string backupName) { WriteEvent(25, backupName); }
+
+        [Event(
+            eventId: 26,
+            Level = EventLevel.Informational,
+            Message = "Gallery Database '{0}' not found")]
+        public void GalleryDatabaseNotFound(string galleryDBName) { WriteEvent(26, galleryDBName); }
+
+        [Event(
+            eventId: 27,
+            Level = EventLevel.Informational,
+            Message = "Rename Needed")]
+        public void RenameNeeded() { WriteEvent(27); }
+
+        [Event(
+            eventId: 28,
+            Level = EventLevel.Informational,
+            Message = "Renaming backup database '{0}' to temp database '{1}'")]
+        public void RenamingBackupToTemp(string backupName, string tempName) { WriteEvent(28, backupName, tempName); }
+
+        [Event(
+            eventId: 29,
+            Level = EventLevel.Informational,
+            Message = "Renamed backup to Temp")]
+        public void RenamedBackupToTemp() { WriteEvent(29); }
+
+        [Event(
+            eventId: 30,
+            Level = EventLevel.Informational,
+            Message = "Renaming nuget gallery database '{0}' to backup database '{1}'")]
+        public void RenamingNuGetGalleryToBackup(string galleryDBName, string backupName) { WriteEvent(30, galleryDBName, backupName); }
+
+        [Event(
+            eventId: 31,
+            Level = EventLevel.Informational,
+            Message = "Renamed nuget gallery to backup")]
+        public void RenamedNuGetGalleryToBackup() { WriteEvent(31); }
+
+        [Event(
+            eventId: 32,
+            Level = EventLevel.Informational,
+            Message = "Renaming temp database '{0}' to nuget gallery database '{1}'")]
+        public void RenamingTempToNuGetGallery(string tempName, string galleryDBName) { WriteEvent(32, tempName, galleryDBName); }
+
+        [Event(
+            eventId: 33,
+            Level = EventLevel.Informational,
+            Message = "RenamedTempToNuGetGallery")]
+        public void RenamedTempToNuGetGallery() { WriteEvent(33); }
+
+        [Event(
+            eventId: 34,
+            Level = EventLevel.Informational,
+            Message = "No rename needed")]
+        public void NoRenameNeeded() { WriteEvent(34); }
     }
 }
