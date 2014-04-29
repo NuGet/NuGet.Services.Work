@@ -226,17 +226,17 @@ namespace NuGet.Services.Work.Jobs
             }
 
             cstr.TrimNetworkProtocol();
-            Log.PreparingToRename(cstr.DataSource); // EventId: 1
+            Log.PreparingToRename(cstr.DataSource);
 
             if (String.IsNullOrEmpty(GalleryDBName))
             {
                 GalleryDBName = DefaultGalleryDBName;
             }
-            Log.GalleryDBName(GalleryDBName); // EventId: 2
+            Log.GalleryDBName(GalleryDBName);
 
             using (SqlConnection connection = await cstr.ConnectToMaster())
             {
-                Log.ConnectedToMaster();  // EventId: 4
+                Log.ConnectedToMaster();
 
                 var backupDatabase = await GetDatabase(connection, TargetDatabaseName);
                 if (backupDatabase == null)
@@ -245,12 +245,12 @@ namespace NuGet.Services.Work.Jobs
                 }
 
                 var backupName = backupDatabase.name;
-                Log.BackupName(backupName);  // EventId: 5
+                Log.BackupName(backupName);
 
                 var galleryDatabase = await GetDatabase(connection, GalleryDBName);
                 if (galleryDatabase == null)
                 {
-                    Log.GalleryDatabaseNotFound(GalleryDBName);  // EventId: 6
+                    Log.GalleryDatabaseNotFound(GalleryDBName);
                     // NO Gallery Database was found. This is BAD
                     // Simply rename latest backup database to GalleryDatabase and bail
                     await connection.ExecuteAsync(String.Format(RenameDatabase, backupName, GalleryDBName));
@@ -262,20 +262,20 @@ namespace NuGet.Services.Work.Jobs
                 // If so, ignore. Otherwise, Rename
                 if (backupDatabase.create_date > galleryDatabase.create_date)
                 {
-                    Log.RenameNeeded();  // EventId: 7
-                    Log.RenamingBackupToTemp(backupName, TempBackupName); // EventId: 8
+                    Log.RenameNeeded();
+                    Log.RenamingBackupToTemp(backupName, TempBackupName);
                     await connection.ExecuteAsync(String.Format(RenameDatabase, backupName, TempBackupName));
-                    Log.RenamedBackupToTemp(); // EventId: 9
-                    Log.RenamingNuGetGalleryToBackup(GalleryDBName, backupName); // EventId: 10
+                    Log.RenamedBackupToTemp();
+                    Log.RenamingNuGetGalleryToBackup(GalleryDBName, backupName);
                     await connection.ExecuteAsync(String.Format(RenameDatabase, GalleryDBName, backupName));
-                    Log.RenamedNuGetGalleryToBackup(); // EventId: 11
-                    Log.RenamingTempToNuGetGallery(TempBackupName, GalleryDBName); // EventId: 12
+                    Log.RenamedNuGetGalleryToBackup();
+                    Log.RenamingTempToNuGetGallery(TempBackupName, GalleryDBName);
                     await connection.ExecuteAsync(String.Format(RenameDatabase, TempBackupName, GalleryDBName));
-                    Log.RenamedTempToNuGetGallery(); // EventId: 13
+                    Log.RenamedTempToNuGetGallery();
                 }
                 else
                 {
-                    Log.NoRenameNeeded(); // EventId: 14
+                    Log.NoRenameNeeded();
                 }
             }
         }
