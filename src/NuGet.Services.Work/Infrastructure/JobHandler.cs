@@ -13,12 +13,22 @@ namespace NuGet.Services.Work
         where TEventSource : EventSource
     {
         private TEventSource _log = EventSourceInstanceManager.Get<TEventSource>();
+        private IList<EventSource> _additionalSources = new List<EventSource>();
 
         public TEventSource Log { get { return _log; } }
 
-        public override EventSource GetEventSource()
+        public override IEnumerable<EventSource> GetEventSources()
         {
-            return Log;
+            yield return Log;
+            foreach (var source in _additionalSources)
+            {
+                yield return source;
+            }
+        }
+
+        protected void AddEventSource(EventSource log)
+        {
+            _additionalSources.Add(log);
         }
     }
 

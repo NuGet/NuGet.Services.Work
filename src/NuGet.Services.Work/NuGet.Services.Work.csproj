@@ -284,7 +284,6 @@
     <Compile Include="Jobs\SyncPackagesFromBackupJob.cs" />
     <Compile Include="Jobs\TestAsyncJob.cs" />
     <Compile Include="Jobs\CreateOnlineDatabaseBackupJob.cs" />
-    <Compile Include="Jobs\TestHeartBeatJob.cs" />
     <Compile Include="Jobs\TestLongRunningJob.cs" />
     <Compile Include="Jobs\Models\Database.cs" />
     <Compile Include="Jobs\TestPingJob.cs" />

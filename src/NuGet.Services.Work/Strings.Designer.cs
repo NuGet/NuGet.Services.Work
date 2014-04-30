@@ -70,11 +70,29 @@ namespace NuGet.Services.Work {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Could not identify the Azure Subscription for the current environment. Use the &quot;Azure.SubscriptionId&quot; config setting to specify it..
+        ///   Looks up a localized string similar to Could not identify the Azure Subscription for the current environment. Use the &quot;Azure.SubscriptionId&quot; and &quot;Azure.SubscriptionName&quot; config settings to specify it..
         /// </summary>
         internal static string AzureHub_MissingSubscription {
             get {
                 return ResourceManager.GetString("AzureHub_MissingSubscription", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to &quot;{0}&quot; was specified in configuration, but &quot;{1}&quot; was not. BOTH &quot;Azure.SubscriptionId&quot; and &quot;Azure.SubscriptionName&quot; MUST be specified if one is specified..
+        /// </summary>
+        internal static string AzureHub_MissingSubscriptionConfigSetting {
+            get {
+                return ResourceManager.GetString("AzureHub_MissingSubscriptionConfigSetting", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to &lt;null&gt;.
+        /// </summary>
+        internal static string AzureHub_NullThumbprint {
+            get {
+                return ResourceManager.GetString("AzureHub_NullThumbprint", resourceCulture);
             }
         }
         

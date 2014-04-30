@@ -152,7 +152,12 @@ namespace NuGet.Services.Work
             return Dispatch(invocation, new BlobInvocationLogCapture(invocation, Storage), cancelToken);
         }
 
-        protected internal virtual async Task Dispatch(InvocationState invocation, InvocationLogCapture capture, CancellationToken cancelToken)
+        protected internal virtual Task Dispatch(InvocationState invocation, InvocationLogCapture capture, CancellationToken cancelToken)
+        {
+            return Dispatch(invocation, capture, cancelToken, includeContinuations: false);
+        }
+
+        protected internal virtual async Task Dispatch(InvocationState invocation, InvocationLogCapture capture, CancellationToken cancelToken, bool includeContinuations)
         {
             InvocationContext.SetCurrentInvocationId(invocation.Id);
             
@@ -236,8 +241,36 @@ namespace NuGet.Services.Work
             }
             else
             {
-                // Suspend the job until the continuation is ready to run
-                await Queue.Suspend(invocation, result.Continuation.Parameters, result.Continuation.WaitPeriod, logUrl);
+                if (includeContinuations)
+                {
+                    invocation.Update(new InvocationState.InvocationRow()
+                    {
+                        Id = Guid.NewGuid(),
+                        Version = invocation.CurrentVersion + 1,
+                        Job = invocation.Job,
+                        Source = invocation.Id.ToString("N"),
+                        Status = (int)InvocationStatus.Suspended,
+                        Result = (int)ExecutionResult.Incomplete,
+                        LastDequeuedAt = invocation.LastDequeuedAt == null ? (DateTime?)null : invocation.LastDequeuedAt.Value.UtcDateTime,
+                        LastSuspendedAt = DateTime.UtcNow,
+                        CompletedAt = null,
+                        QueuedAt = invocation.QueuedAt.UtcDateTime,
+                        NextVisibleAt = invocation.NextVisibleAt.UtcDateTime,
+                        UpdatedAt = invocation.UpdatedAt.UtcDateTime,
+                        Payload = InvocationPayloadSerializer.Serialize(result.Continuation.Parameters),
+                        IsContinuation = true
+                    });
+
+                    // Run the continuation inline after waiting
+                    await Task.Delay(result.Continuation.WaitPeriod);
+
+                    await Dispatch(invocation, capture, cancelToken, includeContinuations);
+                }
+                else
+                {
+                    // Suspend the job until the continuation is ready to run
+                    await Queue.Suspend(invocation, result.Continuation.Parameters, result.Continuation.WaitPeriod, logUrl);
+                }
             }
         }
 
