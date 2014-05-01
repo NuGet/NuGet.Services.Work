@@ -19,6 +19,11 @@ namespace NuGet.Services.Work.Jobs.Models
         {
             return DatabaseBackup.Create(this);
         }
+
+        public override string ToString()
+        {
+            return String.Format("Name: {0}, Created Date: {1}, State: {2}", name, create_date, state);
+        }
     }
 
     public class DatabaseBackup {

@@ -20,6 +20,7 @@ namespace NuGet.Services.Work.Jobs
     {
         public static readonly string BackupPrefix = "Backup";
         private const string RenameDatabase = @"ALTER DATABASE [{0}] MODIFY NAME = [{1}]";
+        private const string DropDatabase = @"DROP DATABASE [{0}]";
         private const string DefaultGalleryDBName = "NuGetGallery";
         private const string TempBackupName = "TempBackup";
         public string SourceStorageAccountName { get; set; }
@@ -263,6 +264,15 @@ namespace NuGet.Services.Work.Jobs
                 if (backupDatabase.create_date > galleryDatabase.create_date)
                 {
                     Log.RenameNeeded();
+
+                    var tempBackupDatabase = await GetDatabase(connection, TempBackupName);
+                    if (tempBackupDatabase != null)
+                    {
+                        Log.DroppingExistingTempBackup(tempBackupDatabase.ToString());
+                        await connection.ExecuteAsync(String.Format(DropDatabase, tempBackupDatabase.name));
+                        Log.DroppedTempBackup();
+                    }
+
                     Log.RenamingBackupToTemp(backupName, TempBackupName);
                     await connection.ExecuteAsync(String.Format(RenameDatabase, backupName, TempBackupName));
                     Log.RenamedBackupToTemp();
@@ -455,5 +465,17 @@ namespace NuGet.Services.Work.Jobs
             Level = EventLevel.Informational,
             Message = "No rename needed")]
         public void NoRenameNeeded() { WriteEvent(34); }
+
+        [Event(
+            eventId: 35,
+            Level = EventLevel.Informational,
+            Message = "Temp Backup database already exists. Dropping it. TempBackupDatabase --> {0}")]
+        public void DroppingExistingTempBackup(string databaseInfo) { WriteEvent(35, databaseInfo); }
+
+        [Event(
+            eventId: 36,
+            Level = EventLevel.Informational,
+            Message = "Dropped Temp Backup database")]
+        public void DroppedTempBackup() { WriteEvent(36); }
     }
 }
