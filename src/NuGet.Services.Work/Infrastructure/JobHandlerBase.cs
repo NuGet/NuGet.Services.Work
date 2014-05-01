@@ -48,7 +48,7 @@ namespace NuGet.Services.Work
             return result;
         }
 
-        public abstract EventSource GetEventSource();
+        public abstract IEnumerable<EventSource> GetEventSources();
         protected internal abstract Task<InvocationResult> Invoke();
 
         public virtual Task<InvocationState> Enqueue(Type job)

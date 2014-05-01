@@ -32,7 +32,7 @@ namespace NuGet.Services.Work
             [Job("ATestJob")]
             public class ATestJorb : JobHandlerBase
             {
-                public override System.Diagnostics.Tracing.EventSource GetEventSource()
+                public override IEnumerable<System.Diagnostics.Tracing.EventSource> GetEventSources()
                 {
                     throw new NotImplementedException();
                 }
@@ -45,7 +45,7 @@ namespace NuGet.Services.Work
 
             public class ATestJerb : JobHandlerBase
             {
-                public override System.Diagnostics.Tracing.EventSource GetEventSource()
+                public override IEnumerable<System.Diagnostics.Tracing.EventSource> GetEventSources()
                 {
                     throw new NotImplementedException();
                 }
@@ -58,7 +58,7 @@ namespace NuGet.Services.Work
 
             public class ATestJob : JobHandlerBase
             {
-                public override System.Diagnostics.Tracing.EventSource GetEventSource()
+                public override IEnumerable<System.Diagnostics.Tracing.EventSource> GetEventSources()
                 {
                     throw new NotImplementedException();
                 }

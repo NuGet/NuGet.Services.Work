@@ -45,14 +45,17 @@ namespace NuGet.Services.Work.Monitoring
 
         public virtual void SetJob(JobDescription jobdef, JobHandlerBase job)
         {
-            var eventSource = job.GetEventSource();
-            if (eventSource == null)
+            var sources = job.GetEventSources() ?? Enumerable.Empty<EventSource>();
+            if (!sources.Any())
             {
                 InvocationEventSource.Log.NoEventSource(jobdef.Name);
             }
             else
             {
-                _listener.EnableEvents(eventSource, EventLevel.Informational);
+                foreach (var source in sources)
+                {
+                    _listener.EnableEvents(source, EventLevel.Informational);
+                }
             }
         }
     

@@ -124,9 +124,9 @@ namespace NuGet.Services.Work
 
         public class TestJob : JobHandlerBase
         {
-            public override EventSource GetEventSource()
+            public override IEnumerable<EventSource> GetEventSources()
             {
-                return null;
+                return Enumerable.Empty<EventSource>();
             }
 
             protected internal override Task<InvocationResult> Invoke()
@@ -147,9 +147,9 @@ namespace NuGet.Services.Work
 
         public class TestAsyncJob : JobHandlerBase, IAsyncJob
         {
-            public override EventSource GetEventSource()
+            public override IEnumerable<EventSource> GetEventSources()
             {
-                return null;
+                return Enumerable.Empty<EventSource>();
             }
 
             public Task<InvocationResult> InvokeContinuation(InvocationContext context)
@@ -170,9 +170,9 @@ namespace NuGet.Services.Work
                 GetContextSlot().Value = service;
             }
 
-            public override EventSource GetEventSource()
+            public override IEnumerable<EventSource> GetEventSources()
             {
-                return null;
+                return Enumerable.Empty<EventSource>();
             }
 
             protected internal override Task<InvocationResult> Invoke()

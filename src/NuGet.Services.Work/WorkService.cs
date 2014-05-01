@@ -32,6 +32,7 @@ using Autofac.Features.ResolveAnything;
 using NuGet.Services.Http;
 using Microsoft.Owin;
 using System.Web.Http.Routing;
+using NuGet.Services.Work.Azure;
 
 namespace NuGet.Services.Work
 {
@@ -142,6 +143,10 @@ namespace NuGet.Services.Work
         {
             base.RegisterComponents(builder);
 
+            builder.RegisterType<AzureHub>()
+                .AsSelf()
+                .SingleInstance();
+
             var jobdefs = GetAllAvailableJobs();
             builder.RegisterInstance(jobdefs).As<IEnumerable<JobDescription>>();
 
@@ -182,52 +187,6 @@ namespace NuGet.Services.Work
             return (await Task.WhenAll(Workers.Select(async w => Tuple.Create(w.Id, await w.GetCurrentStatus())))).ToDictionary(
                 t => ServiceName.ToString() + "#" + t.Item1.ToString(),
                 t => t.Item2);
-        }
-
-        public IObservable<EventEntry> RunJob(string job, string payload)
-        {
-            var runner = new JobRunner(
-                new JobDispatcher(
-                    GetAllAvailableJobs(),
-                    Container),
-                InvocationQueue.Null,
-                Container.Resolve<ConfigurationHub>(),
-                Container.Resolve<StorageHub>(),
-                Clock.RealClock);
-
-            var invocation =
-                new InvocationState(
-                    new InvocationState.InvocationRow()
-                    {
-                        Payload = payload,
-                        Status = (int)InvocationStatus.Executing,
-                        Result = (int)ExecutionResult.Incomplete,
-                        Source = Constants.Source_LocalJob,
-                        Id = Guid.NewGuid(),
-                        Job = job,
-                        UpdatedBy = Environment.MachineName,
-                        UpdatedAt = DateTime.UtcNow,
-                        QueuedAt = DateTime.UtcNow,
-                        NextVisibleAt = DateTime.UtcNow + TimeSpan.FromMinutes(5)
-                    });
-            return Observable.Create<EventEntry>(observer =>
-            {
-                var capture = new InvocationLogCapture(invocation);
-                capture.Subscribe(e => observer.OnNext(e), ex => observer.OnError(ex));
-                runner.Dispatch(invocation, capture, CancellationToken.None).ContinueWith(t =>
-                {
-                    if (t.IsFaulted)
-                    {
-                        observer.OnError(t.Exception);
-                    }
-                    else
-                    {
-                        observer.OnCompleted();
-                    }
-                    return t;
-                });
-                return () => { }; // No action on unsubscribe
-            });
         }
 
         protected override void ConfigureAttributeRouting(DefaultInlineConstraintResolver resolver)
