@@ -260,36 +260,34 @@
     <Compile Include="Infrastructure\UnknownJobException.cs" />
     <Compile Include="JobComponentsModule.cs" />
     <Compile Include="JobFailureException.cs" />
-    <Compile Include="Jobs\AggregateStatisticsJob.cs" />
-    <Compile Include="Jobs\BackupPackageBlobsJob.cs" />
+    <Compile Include="Jobs\Stats\AggregateStatisticsJob.cs" />
+    <Compile Include="Jobs\Storage\BackupPackageBlobsJob.cs" />
     <Compile Include="Jobs\Bases\ReportGeneratingJobBase.cs" />
     <Compile Include="Jobs\Bases\SearchIndexJobHandlerBase.cs" />
-    <Compile Include="Jobs\CalculateStatsTotalsJob.cs" />
-    <Compile Include="Jobs\CleanOnlineDatabaseBackupsJob.cs" />
+    <Compile Include="Jobs\Stats\CalculateStatsTotalsJob.cs" />
     <Compile Include="Jobs\Bases\DatabaseJobHandlerBase.cs" />
-    <Compile Include="Jobs\CreateWarehouseReportsJob.cs" />
-    <Compile Include="Jobs\ExportDatabaseJob.cs" />
-    <Compile Include="Jobs\GenerateDownloadCountReportJob.cs" />
-    <Compile Include="Jobs\GenerateSearchRankingsJob.cs" />
+    <Compile Include="Jobs\Stats\CreateWarehouseReportsJob.cs" />
+    <Compile Include="Jobs\Db\ExportDatabaseJob.cs" />
+    <Compile Include="Jobs\Search\GenerateDownloadCountReportJob.cs" />
+    <Compile Include="Jobs\Search\GenerateSearchRankingsJob.cs" />
     <Compile Include="Jobs\HandlePackageEditsJob.cs" />
-    <Compile Include="Jobs\ImportDatabaseJob.cs" />
+    <Compile Include="Jobs\Db\ImportDatabaseJob.cs" />
     <Compile Include="Jobs\Models\PackageEdit.cs" />
     <Compile Include="Jobs\Models\PackageRef.cs" />
     <Compile Include="Jobs\Models\SearchRankingEntry.cs" />
-    <Compile Include="Jobs\PurgeCompletedInvocationsJob.cs" />
-    <Compile Include="Jobs\PurgePackageStatisticsJob.cs" />
-    <Compile Include="Jobs\RebuildSearchIndexJob.cs" />
-    <Compile Include="Jobs\ReplicatePackageStatisticsJob.cs" />
-    <Compile Include="Jobs\RestoreDatabaseBackupJob.cs" />
-    <Compile Include="Jobs\SyncPackagesFromBackupJob.cs" />
-    <Compile Include="Jobs\TestAsyncJob.cs" />
-    <Compile Include="Jobs\CreateOnlineDatabaseBackupJob.cs" />
-    <Compile Include="Jobs\TestLongRunningJob.cs" />
+    <Compile Include="Jobs\WorkService\PurgeCompletedInvocationsJob.cs" />
+    <Compile Include="Jobs\Stats\PurgePackageStatisticsJob.cs" />
+    <Compile Include="Jobs\Search\RebuildSearchIndexJob.cs" />
+    <Compile Include="Jobs\Stats\ReplicatePackageStatisticsJob.cs" />
+    <Compile Include="Jobs\Db\CopyDatabaseJob.cs" />
+    <Compile Include="Jobs\Storage\SyncPackagesFromBackupJob.cs" />
+    <Compile Include="Jobs\WorkService\TestAsyncJob.cs" />
+    <Compile Include="Jobs\WorkService\TestLongRunningJob.cs" />
     <Compile Include="Jobs\Models\Database.cs" />
-    <Compile Include="Jobs\TestPingJob.cs" />
-    <Compile Include="Jobs\TransferBackupPackagesJob.cs" />
+    <Compile Include="Jobs\WorkService\TestPingJob.cs" />
+    <Compile Include="Jobs\Storage\TransferBackupPackagesJob.cs" />
     <Compile Include="Jobs\UpdateLicenseReportsJob.cs" />
-    <Compile Include="Jobs\UpdateSearchIndexJob.cs" />
+    <Compile Include="Jobs\Search\UpdateSearchIndexJob.cs" />
     <Compile Include="LocalWorkService.cs" />
     <Compile Include="Monitoring\EventSourceWriter.cs" />
     <Compile Include="ServiceReferences\DACWebServiceReference.cs" />
@@ -345,6 +343,7 @@
     <EmbeddedResource Include="Jobs\Scripts\SearchRanking_ByProjectType.sql" />
     <EmbeddedResource Include="Jobs\Scripts\SearchRanking_Overall.sql" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="..\..\packages\Microsoft.Bcl.Build.1.0.13\tools\Microsoft.Bcl.Build.targets" Condition="Exists('..\..\packages\Microsoft.Bcl.Build.1.0.13\tools\Microsoft.Bcl.Build.targets')" />
   <Target Name="EnsureBclBuildImported" BeforeTargets="BeforeBuild" Condition="'$(BclBuildImported)' == ''">

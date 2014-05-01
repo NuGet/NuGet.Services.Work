@@ -255,7 +255,7 @@ namespace NuGet.Services.Work
                         LastSuspendedAt = DateTime.UtcNow,
                         CompletedAt = null,
                         QueuedAt = invocation.QueuedAt.UtcDateTime,
-                        NextVisibleAt = invocation.NextVisibleAt.UtcDateTime,
+                        NextVisibleAt = invocation.NextVisibleAt.UtcDateTime + DefaultInvisibilityPeriod,
                         UpdatedAt = invocation.UpdatedAt.UtcDateTime,
                         Payload = InvocationPayloadSerializer.Serialize(result.Continuation.Parameters),
                         IsContinuation = true
