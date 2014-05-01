@@ -8,7 +8,8 @@ namespace NuGet.Services.Work.Helpers
 {
     public static class MetadataEventStreamSQLQueries
     {
-        public const string GetAssertionsQuery = @"DECLARE		@PackageAssertions TABLE
+        public const string GetAssertionsQuery = @"
+DECLARE		@PackageAssertions TABLE
 (
 			[Key] int
 		,	PackageId nvarchar(128)
@@ -113,7 +114,8 @@ FROM		(
 INNER JOIN	LogPackageOwners WITH (NOLOCK)
 		ON	LogPackageOwners.[Key] = PackageOwnerAssertions.MaxKey";
 
-        public const string ProcessAssertionsQuery = @"DECLARE		@ProcessedDateTime datetime = GETUTCDATE()
+        public const string ProcessAssertionsQuery = @"
+DECLARE		@ProcessedDateTime datetime = GETUTCDATE()
 
 UPDATE		LogPackages
 SET			ProcessedDateTime = @ProcessedDateTime
@@ -125,19 +127,23 @@ WHERE		[Key] IN @packageOwnerAssertionKeys";
 
         // Purge Assertions Queries
 
-        public const string PurgePackageAssertionsQuery = @"DELETE TOP(@MaxPurgeRecords) FROM dbo.LogPackages
+        public const string PurgePackageAssertionsQuery = @"
+DELETE TOP(@MaxPurgeRecords) FROM dbo.LogPackages
 WHERE ProcessedDateTime IS NOT NULL
 AND ProcessedDateTime < @PurgeCutoffDateTime";
 
-        public const string CountPackageAssertionsToPurgeQuery = @"SELECT COUNT(*) FROM dbo.LogPackages WITH(NOLOCK)
+        public const string CountPackageAssertionsToPurgeQuery = @"
+SELECT COUNT(*) FROM dbo.LogPackages WITH(NOLOCK)
 WHERE ProcessedDateTime IS NOT NULL
 AND ProcessedDateTime < @PurgeCutoffDateTime";
 
-        public const string PurgePackageOwnerAssertionsQuery = @"DELETE TOP(@MaxPurgeRecords) FROM dbo.LogPackageOwners
+        public const string PurgePackageOwnerAssertionsQuery = @"
+DELETE TOP(@MaxPurgeRecords) FROM dbo.LogPackageOwners
 WHERE ProcessedDateTime IS NOT NULL
 AND ProcessedDateTime < @PurgeCutoffDateTime";
 
-        public const string CountPackageOwnerAssertionsToPurgeQuery = @"SELECT COUNT(*) FROM dbo.LogPackageOwners WITH(NOLOCK)
+        public const string CountPackageOwnerAssertionsToPurgeQuery = @"
+SELECT COUNT(*) FROM dbo.LogPackageOwners WITH(NOLOCK)
 WHERE ProcessedDateTime IS NOT NULL
 AND ProcessedDateTime < @PurgeCutoffDateTime";
     }

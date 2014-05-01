@@ -54,7 +54,7 @@ namespace NuGet.Services.Work.Jobs
         /// <summary>
         /// The following cap overrides the MinPurgeAge parameter and never allows purging of records within the last day
         /// </summary>
-        private static readonly TimeSpan MinPurgeAgeCap = TimeSpan.Parse("1");
+        private static readonly TimeSpan MinPurgeAgeCap = TimeSpan.FromDays(1);
         private static readonly JsonSerializerSettings DefaultJsonSerializerSettings = new JsonSerializerSettings() { ContractResolver = new CamelCasePropertyNamesContractResolver() };
         public static readonly JToken AssertionSetContext = JToken.Parse(@"{
 	'@vocab' : 'http://nuget.org/schema#',
@@ -103,11 +103,9 @@ namespace NuGet.Services.Work.Jobs
         /// </summary>
         public int MaxUpdateRecords { get; set; }
 
-        #region PARAMETERS FOR PURGING ASSERTIONS
         public int MaxPurgeRecords { get; set; }
 
         public TimeSpan MinPurgeAge { get; set; }
-        #endregion
 
         private CloudBlobContainer EventStreamContainer { get; set; }
 
@@ -127,6 +125,7 @@ namespace NuGet.Services.Work.Jobs
             }
 
             // If MinPurgeAge is not specified, its default value TimeSpan.Zero will be less than the cap and will get overridden
+            // So, no need to set a default value for it
 
             if (MaxPurgeRecords == 0)
             {
@@ -183,7 +182,7 @@ namespace NuGet.Services.Work.Jobs
 
         private async Task PurgeAssertions(SqlConnection connection)
         {
-            var purgeCutoffDateTime = DateTime.UtcNow - MinPurgeAge;
+            var purgeCutoffDateTime = (DateTime.UtcNow - MinPurgeAge).Date;
             Log.PurgeCutoffDateTime(purgeCutoffDateTime);
             await PurgeAssertions(connection, purgeCutoffDateTime, MetadataEventStreamSQLQueries.CountPackageAssertionsToPurgeQuery, MetadataEventStreamSQLQueries.PurgePackageAssertionsQuery);
             await PurgeAssertions(connection, purgeCutoffDateTime, MetadataEventStreamSQLQueries.CountPackageOwnerAssertionsToPurgeQuery, MetadataEventStreamSQLQueries.PurgePackageOwnerAssertionsQuery);
@@ -486,7 +485,7 @@ namespace NuGet.Services.Work.Jobs
                 // Set @id to uri of the blob
                 json[EventId] = newestBlob.Uri.ToString();
 
-                // First upload the created block
+                // First upload the created blob
                 await Upload(newestBlob, json.ToString(), ContentType);
 
                 if (!String.IsNullOrEmpty(previousNewestBlobName))
@@ -499,7 +498,7 @@ namespace NuGet.Services.Work.Jobs
                     }
 
                     previousNewestJSON[EventNewer] = GetJsonLdIRI(GetRelativePathToEvent(blobName));
-                    // Finally, upload the index block
+                    // Secondly, upload the previousNewestBlob with a 'event newer' link to the newestBlob
                     await Upload(previousNewestBlob, previousNewestJSON.ToString(), ContentType);
                     Log.PreviousNewestBlob(previousNewestBlob.Uri.ToString());
                 }
@@ -507,7 +506,7 @@ namespace NuGet.Services.Work.Jobs
                 // Set @id to uri of the blob
                 indexJSON[EventId] = indexJSONBlob.Uri.ToString();
 
-                // Finally, upload the index block
+                // Finally, upload the index blob
                 await Upload(indexJSONBlob, indexJSON.ToString(), ContentType);
 
                 Log.NewestBlob(newestBlob.Uri.ToString());
