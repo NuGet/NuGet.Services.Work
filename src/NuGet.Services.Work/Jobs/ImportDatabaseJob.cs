@@ -35,6 +35,8 @@ namespace NuGet.Services.Work.Jobs
 
         public string GalleryDBName { get; set; }
 
+        public bool ReadyToRenameDB { get; set; }
+
         public ImportDatabaseJob(ConfigurationHub configHub) : base(configHub) { }
 
         protected internal override async Task<JobContinuation> Execute()
@@ -56,6 +58,12 @@ namespace NuGet.Services.Work.Jobs
 
             cstr.TrimNetworkProtocol();
             Log.PreparingToImport(cstr.ToString());
+
+            if (String.IsNullOrEmpty(GalleryDBName))
+            {
+                GalleryDBName = DefaultGalleryDBName;
+            }
+            Log.GalleryDBName(GalleryDBName);
 
             if (SourceStorageAccountName == null && SourceStorageAccountKey == null)
             {
@@ -93,9 +101,16 @@ namespace NuGet.Services.Work.Jobs
             if (await DoesDBExist(cstr, TargetDatabaseName))
             {
                 Log.DatabaseAlreadyExists("Database {0} already exists.Skipping...", TargetDatabaseName);
-                TargetDatabaseConnection = cstr;
-                await RenameImportedDBToGalleryDB();
-                return Complete();
+
+                // DB may not be ready for rename operation
+                // This resulted in intermittent failures
+                // So, Suspend to rename database
+                var parameters = new Dictionary<string, string>();
+                parameters["TargetDatabaseConnection"] = cstr.ConnectionString;
+                parameters["TargetDatabaseName"] = TargetDatabaseName;
+                parameters["GalleryDBName"] = GalleryDBName;
+                parameters["ReadyToRenameDB"] = true.ToString();
+                return Suspend(TimeSpan.FromMinutes(5), parameters);
             }
 
             WASDImportExport.ImportExportHelper helper = new WASDImportExport.ImportExportHelper()
@@ -123,6 +138,7 @@ namespace NuGet.Services.Work.Jobs
                 parameters["TargetDatabaseConnection"] = cstr.ConnectionString;
                 parameters["EndPointUri"] = endPointUri;
                 parameters["TargetDatabaseName"] = TargetDatabaseName;
+                parameters["GalleryDBName"] = GalleryDBName;
 
                 return Suspend(TimeSpan.FromMinutes(5), parameters);
             }
@@ -134,45 +150,66 @@ namespace NuGet.Services.Work.Jobs
 
         protected internal override async Task<JobContinuation> Resume()
         {
-            if (RequestGUID == null || TargetDatabaseConnection == null || EndPointUri == null || TargetDatabaseName == null)
+            if (ReadyToRenameDB)
             {
-                throw new ArgumentNullException("Job could not resume properly due to incorrect parameters");
-            }
-
-            var endPointUri = EndPointUri;
-            WASDImportExport.ImportExportHelper helper = new WASDImportExport.ImportExportHelper()
-            {
-                EndPointUri = endPointUri,
-                ServerName = TargetDatabaseConnection.DataSource,
-                UserName = TargetDatabaseConnection.UserID,
-                Password = TargetDatabaseConnection.Password,
-                DatabaseName = TargetDatabaseName,
-            };
-
-            var statusInfoList = helper.CheckRequestStatus(RequestGUID);
-            var statusInfo = statusInfoList.FirstOrDefault();
-
-            if (statusInfo.Status == "Failed")
-            {
-                Log.ImportFailed(statusInfo.ErrorMessage);
-                throw new Exception(statusInfo.ErrorMessage);
-            }
-
-            if (statusInfo.Status == "Completed")
-            {
-                Log.ImportCompleted(statusInfo.DatabaseName, helper.ServerName);
+                if (TargetDatabaseConnection == null || TargetDatabaseName == null || String.IsNullOrEmpty(GalleryDBName))
+                {
+                    throw new ArgumentNullException("Job could not resume properly due to incorrect parameters");
+                }
                 await RenameImportedDBToGalleryDB();
                 return Complete();
             }
+            else
+            {
+                if (RequestGUID == null || TargetDatabaseConnection == null || EndPointUri == null || TargetDatabaseName == null || String.IsNullOrEmpty(GalleryDBName))
+                {
+                    throw new ArgumentNullException("Job could not resume properly due to incorrect parameters");
+                }
 
-            Log.Importing(statusInfo.Status);
+                var endPointUri = EndPointUri;
+                WASDImportExport.ImportExportHelper helper = new WASDImportExport.ImportExportHelper()
+                {
+                    EndPointUri = endPointUri,
+                    ServerName = TargetDatabaseConnection.DataSource,
+                    UserName = TargetDatabaseConnection.UserID,
+                    Password = TargetDatabaseConnection.Password,
+                    DatabaseName = TargetDatabaseName,
+                };
 
-            var parameters = new Dictionary<string, string>();
-            parameters["RequestGUID"] = RequestGUID;
-            parameters["TargetDatabaseConnection"] = TargetDatabaseConnection.ConnectionString;
-            parameters["EndPointUri"] = endPointUri;
-            parameters["TargetDatabaseName"] = TargetDatabaseName;
-            return Suspend(TimeSpan.FromMinutes(5), parameters);
+                var statusInfoList = helper.CheckRequestStatus(RequestGUID);
+                var statusInfo = statusInfoList.FirstOrDefault();
+
+                if (statusInfo.Status == "Failed")
+                {
+                    Log.ImportFailed(statusInfo.ErrorMessage);
+                    throw new Exception(statusInfo.ErrorMessage);
+                }
+
+                if (statusInfo.Status == "Completed")
+                {
+                    Log.ImportCompleted(statusInfo.DatabaseName, helper.ServerName);
+
+                    // Recently imported DB may not be ready for rename operation
+                    // This resulted in intermittent failures
+                    // So, Suspend to rename database
+                    var parametersToRename = new Dictionary<string, string>();
+                    parametersToRename["TargetDatabaseConnection"] = TargetDatabaseConnection.ConnectionString;
+                    parametersToRename["TargetDatabaseName"] = TargetDatabaseName;
+                    parametersToRename["ReadyToRenameDB"] = true.ToString();
+                    parametersToRename["GalleryDBName"] = GalleryDBName;
+                    return Suspend(TimeSpan.FromMinutes(5), parametersToRename);
+                }
+
+                Log.Importing(statusInfo.Status);
+
+                var parameters = new Dictionary<string, string>();
+                parameters["RequestGUID"] = RequestGUID;
+                parameters["TargetDatabaseConnection"] = TargetDatabaseConnection.ConnectionString;
+                parameters["EndPointUri"] = endPointUri;
+                parameters["TargetDatabaseName"] = TargetDatabaseName;
+                parameters["GalleryDBName"] = GalleryDBName;
+                return Suspend(TimeSpan.FromMinutes(5), parameters);
+            }
         }
 
         private string GetLatestBackupBacpacFile(CloudBlobClient cloudBlobClient)
@@ -229,10 +266,6 @@ namespace NuGet.Services.Work.Jobs
             cstr.TrimNetworkProtocol();
             Log.PreparingToRename(cstr.DataSource);
 
-            if (String.IsNullOrEmpty(GalleryDBName))
-            {
-                GalleryDBName = DefaultGalleryDBName;
-            }
             Log.GalleryDBName(GalleryDBName);
 
             using (SqlConnection connection = await cstr.ConnectToMaster())
