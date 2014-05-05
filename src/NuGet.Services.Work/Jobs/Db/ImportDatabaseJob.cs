@@ -17,7 +17,9 @@ namespace NuGet.Services.Work.Jobs
     [Description("Imports a bacpac file into database")]
     public class ImportDatabaseJob : DatabaseJobHandlerBase<ImportDatabaseEventSource>
     {
-        public static readonly string BackupPrefix = "Backup";
+        public static readonly string DefaultExportPrefix = "export";
+
+        public string ExportPrefix { get; set; }
         public string SourceStorageAccountName { get; set; }
 
         public string SourceStorageAccountKey { get; set; }
@@ -168,7 +170,7 @@ namespace NuGet.Services.Work.Jobs
                 // Get a reference to bacpac files container
                 var bacpacFileContainer = cloudBlobClient.GetContainerReference(BlobContainerNames.BacpacFiles);
 
-                var blobItems = bacpacFileContainer.ListBlobs(BackupPrefix, useFlatBlobListing: true);
+                var blobItems = bacpacFileContainer.ListBlobs(ExportPrefix, useFlatBlobListing: true);
                 if (blobItems == null)
                 {
                     throw new Exception("No blobs found in bacpacfiles container. That is a mystery!");
