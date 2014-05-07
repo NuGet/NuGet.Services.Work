@@ -8,6 +8,13 @@ namespace NuGet.Services.Work.Helpers
 {
     public static class MetadataEventStreamSQLQueries
     {
+        public const string LogTablesExistenceQuery = @"
+SELECT      COUNT(*) FROM sys.objects
+WHERE       object_id = OBJECT_ID(N'[dbo].[LogPackages]') AND type in (N'U')
+
+SELECT      COUNT(*) FROM sys.objects
+WHERE       object_id = OBJECT_ID(N'[dbo].[LogPackageOwners]') AND type in (N'U')";
+
         public const string GetAssertionsQuery = @"
 DECLARE		@PackageAssertions TABLE
 (

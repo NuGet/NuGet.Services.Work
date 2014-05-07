@@ -124,19 +124,6 @@ namespace NuGet.Services.Work.Jobs
                 throw new ArgumentNullException("NupkgUrlFormat");
             }
 
-            // If MinPurgeAge is not specified, its default value TimeSpan.Zero will be less than the cap and will get overridden
-            // So, no need to set a default value for it
-
-            if (MaxPurgeRecords == 0)
-            {
-                MaxPurgeRecords = MaxRecordsCap;
-            }
-
-            if (MaxUpdateRecords == 0)
-            {
-                MaxUpdateRecords = MaxRecordsCap;
-            }
-
             var cstr = GetConnectionString() ?? Config.Sql.GetConnectionString(KnownSqlConnection.Legacy);
             if (cstr == null)
             {
@@ -144,32 +131,66 @@ namespace NuGet.Services.Work.Jobs
             }
             cstr.TrimNetworkProtocol();
             Log.SourceDatabase(cstr.DataSource, cstr.InitialCatalog);
-            
-            EventStreamStorage = EventStreamStorage ?? Config.Storage.Legacy;
-            EventStreamContainer = EventStreamStorage.CreateCloudBlobClient().GetContainerReference(
-                String.IsNullOrEmpty(EventStreamContainerName) ? DefaultEventStreamContainerName : EventStreamContainerName);
-            Log.TargetStorageContainer(EventStreamContainer.Uri.ToString());
 
-            if (await EventStreamContainer.CreateIfNotExistsAsync())
-            {
-                Log.CreatedStorageContainer();
-            }
-
-            // MinPurgeAge should be at least MinPurgeAgeCap
-            MinPurgeAge = MinPurgeAge > MinPurgeAgeCap ? MinPurgeAge : MinPurgeAgeCap;
-            Log.MinPurgeAge(MinPurgeAge.ToString());
-
-            // MaxPurgeRecords should be less than MaxRecordsCap
-            MaxPurgeRecords = Math.Min(MaxPurgeRecords, MaxRecordsCap);
-            Log.MaxPurgeRecords(MaxPurgeRecords);
-
-            // MaxUpdateRecords should be less than MaxRecordsCap
-            MaxUpdateRecords = Math.Min(MaxUpdateRecords, MaxRecordsCap);
-            Log.MaxUpdateRecords(MaxUpdateRecords);
-
+            // Bootstrapping: Create log tables/triggers if they are not created already
             using (var connection = await cstr.ConnectTo())
             {
                 Log.ConnectedToDatabase(connection.DataSource, connection.Database, connection.ClientConnectionId);
+
+                // Check if log tables exist
+                var results = connection.QueryMultiple(MetadataEventStreamSQLQueries.LogTablesExistenceQuery);
+                var logPackagesExists = results.Read<int>().Single() != 0;
+                var logPackageOwnersExists = results.Read<int>().Single() != 0;
+
+                if (!logPackagesExists || !logPackageOwnersExists)
+                {
+                    Log.LogTablesDoNotExist();
+                    // Read and run CreateLogTables script
+                    var script = await ResourceHelpers.ReadResourceFile("NuGet.Services.Work.Jobs.Scripts.MetadataEventStream_CreateLogTables.sql");
+                    string[] queries = script.Split(new string[] { "GO" }, StringSplitOptions.RemoveEmptyEntries);
+
+                    foreach (var query in queries)
+                    {
+                        await connection.QueryAsync<int>(query);
+                    }
+                    Log.LogTablesCreated();
+                }
+
+                // If MinPurgeAge is not specified, its default value TimeSpan.Zero will be less than the cap and will get overridden
+                // So, no need to set a default value for it
+
+                if (MaxPurgeRecords == 0)
+                {
+                    MaxPurgeRecords = MaxRecordsCap;
+                }
+
+                if (MaxUpdateRecords == 0)
+                {
+                    MaxUpdateRecords = MaxRecordsCap;
+                }
+
+                EventStreamStorage = EventStreamStorage ?? Config.Storage.Legacy;
+                EventStreamContainer = EventStreamStorage.CreateCloudBlobClient().GetContainerReference(
+                    String.IsNullOrEmpty(EventStreamContainerName) ? DefaultEventStreamContainerName : EventStreamContainerName);
+                Log.TargetStorageContainer(EventStreamContainer.Uri.ToString());
+
+                if (await EventStreamContainer.CreateIfNotExistsAsync())
+                {
+                    Log.CreatedStorageContainer();
+                }
+
+                // MinPurgeAge should be at least MinPurgeAgeCap
+                MinPurgeAge = MinPurgeAge > MinPurgeAgeCap ? MinPurgeAge : MinPurgeAgeCap;
+                Log.MinPurgeAge(MinPurgeAge.ToString());
+
+                // MaxPurgeRecords should be less than MaxRecordsCap
+                MaxPurgeRecords = Math.Min(MaxPurgeRecords, MaxRecordsCap);
+                Log.MaxPurgeRecords(MaxPurgeRecords);
+
+                // MaxUpdateRecords should be less than MaxRecordsCap
+                MaxUpdateRecords = Math.Min(MaxUpdateRecords, MaxRecordsCap);
+                Log.MaxUpdateRecords(MaxUpdateRecords);
+
                 Log.PurgingAssertionsStarted();
                 await PurgeAssertions(connection);
                 Log.PurgingAssertionsCompleted();
@@ -746,5 +767,18 @@ namespace NuGet.Services.Work.Jobs
             Level = EventLevel.Informational,
             Message = "index.json NEW: '{0}'")]
         public void NewIndexJSON(string newIndexJSON) { WriteEvent(33, newIndexJSON); }
+
+        [Event(
+            eventId: 35,
+            Level = EventLevel.Informational,
+            Message = "Log Tables do not exist. Creating...")]
+        public void LogTablesDoNotExist() { WriteEvent(35); }
+
+        [Event(
+            eventId: 36,
+            Level = EventLevel.Informational,
+            Message = "Created log tables")]
+        public void LogTablesCreated() { WriteEvent(36); }
+
     }
 }
