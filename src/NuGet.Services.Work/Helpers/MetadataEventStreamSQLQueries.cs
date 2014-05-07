@@ -8,6 +8,20 @@ namespace NuGet.Services.Work.Helpers
 {
     public static class MetadataEventStreamSQLQueries
     {
+        public const string LogTablesExistenceQuery = @"
+SELECT      COUNT(*) FROM sys.objects
+WHERE       object_id = OBJECT_ID(N'[dbo].[LogPackages]') AND type in (N'U')
+
+SELECT      COUNT(*) FROM sys.objects
+WHERE       object_id = OBJECT_ID(N'[dbo].[LogPackageOwners]') AND type in (N'U')";
+
+        public const string MaxKeyInPackages = @"
+SELECT MAX([Key]) FROM Packages";
+
+        public const string TriggerRecords = @"
+UPDATE Packages SET Listed = Listed
+WHERE [Key] > @startKey AND [Key] < @endKey";
+
         public const string GetAssertionsQuery = @"
 DECLARE		@PackageAssertions TABLE
 (

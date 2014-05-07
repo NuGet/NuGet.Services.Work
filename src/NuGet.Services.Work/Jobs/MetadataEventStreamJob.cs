@@ -50,7 +50,7 @@ namespace NuGet.Services.Work.Jobs
         /// <summary>
         /// The following cap overrides the MaxUpdateRecords and MaxPurgeRecords and never allows updates or deletes on more than 1000 records in a transaction
         /// </summary>
-        private const int MaxRecordsCap = 1000;
+        private const int MaxRecordsCap = 5000;
         /// <summary>
         /// The following cap overrides the MinPurgeAge parameter and never allows purging of records within the last day
         /// </summary>
@@ -103,9 +103,27 @@ namespace NuGet.Services.Work.Jobs
         /// </summary>
         public int MaxUpdateRecords { get; set; }
 
+        /// <summary>
+        /// Number of records that can be purged from any of the log tables
+        /// </summary>
         public int MaxPurgeRecords { get; set; }
 
+        /// <summary>
+        /// Minimum age of records for them to be purged
+        /// </summary>
         public TimeSpan MinPurgeAge { get; set; }
+
+        /// <summary>
+        /// Determines whether to create new package events for all the existing packages
+        /// </summary>
+        public bool ReplicateCurrentState { get; set; }
+
+        /// <summary>
+        /// Replication is achieved is in segments of fixed length
+        /// where each segment is a range of keys from the packages table
+        /// This value represents the start key of the segment which will be replicated in this invocation
+        /// </summary>
+        public int ReplicateSegmentStartKey { get; set; }
 
         private CloudBlobContainer EventStreamContainer { get; set; }
 
@@ -116,27 +134,6 @@ namespace NuGet.Services.Work.Jobs
         public MetadataEventStreamJob(ConfigurationHub configHub) : base(configHub) { }
         protected internal override async Task<JobContinuation> Execute()
         {
-            PushToCloud = true;
-            UpdateTables = true;
-
-            if (String.IsNullOrEmpty(NupkgUrlFormat))
-            {
-                throw new ArgumentNullException("NupkgUrlFormat");
-            }
-
-            // If MinPurgeAge is not specified, its default value TimeSpan.Zero will be less than the cap and will get overridden
-            // So, no need to set a default value for it
-
-            if (MaxPurgeRecords == 0)
-            {
-                MaxPurgeRecords = MaxRecordsCap;
-            }
-
-            if (MaxUpdateRecords == 0)
-            {
-                MaxUpdateRecords = MaxRecordsCap;
-            }
-
             var cstr = GetConnectionString() ?? Config.Sql.GetConnectionString(KnownSqlConnection.Legacy);
             if (cstr == null)
             {
@@ -144,40 +141,135 @@ namespace NuGet.Services.Work.Jobs
             }
             cstr.TrimNetworkProtocol();
             Log.SourceDatabase(cstr.DataSource, cstr.InitialCatalog);
-            
-            EventStreamStorage = EventStreamStorage ?? Config.Storage.Legacy;
-            EventStreamContainer = EventStreamStorage.CreateCloudBlobClient().GetContainerReference(
-                String.IsNullOrEmpty(EventStreamContainerName) ? DefaultEventStreamContainerName : EventStreamContainerName);
-            Log.TargetStorageContainer(EventStreamContainer.Uri.ToString());
 
-            if (await EventStreamContainer.CreateIfNotExistsAsync())
+            if (MaxUpdateRecords == 0)
             {
-                Log.CreatedStorageContainer();
+                MaxUpdateRecords = MaxRecordsCap;
             }
-
-            // MinPurgeAge should be at least MinPurgeAgeCap
-            MinPurgeAge = MinPurgeAge > MinPurgeAgeCap ? MinPurgeAge : MinPurgeAgeCap;
-            Log.MinPurgeAge(MinPurgeAge.ToString());
-
-            // MaxPurgeRecords should be less than MaxRecordsCap
-            MaxPurgeRecords = Math.Min(MaxPurgeRecords, MaxRecordsCap);
-            Log.MaxPurgeRecords(MaxPurgeRecords);
-
             // MaxUpdateRecords should be less than MaxRecordsCap
             MaxUpdateRecords = Math.Min(MaxUpdateRecords, MaxRecordsCap);
             Log.MaxUpdateRecords(MaxUpdateRecords);
 
+
+            // Bootstrapping: Create log tables/triggers if they are not created already
+            // Check if log tables exist - USING QUERY 1 to be created
+            // Run CreateLogTablesQuery.sql
+            // TODO : Call Bootstrap code
+
+            // If ReplicateCurrentState is true
+            if (ReplicateCurrentState)
+            {
+                // Parameters needed to resume are TargetDatabaseConnection, MaxUpdateRecords,
+                // ReplicateSegmentKey and ReplicateCurrentState set to true
+                // MaxUpdateRecords and ReplicateCurrentState are already set. Set the other two params
+                TargetDatabaseConnection = cstr;
+                ReplicateSegmentStartKey = 1;
+
+                return await Resume();
+            }
+            else
+            {
+                PushToCloud = true;
+                UpdateTables = true;
+
+                if (String.IsNullOrEmpty(NupkgUrlFormat))
+                {
+                    throw new ArgumentNullException("NupkgUrlFormat");
+                }
+
+                // If MinPurgeAge is not specified, its default value TimeSpan.Zero will be less than the cap and will get overridden
+                // So, no need to set a default value for it
+
+                if (MaxPurgeRecords == 0)
+                {
+                    MaxPurgeRecords = MaxRecordsCap;
+                }
+
+                EventStreamStorage = EventStreamStorage ?? Config.Storage.Legacy;
+                EventStreamContainer = EventStreamStorage.CreateCloudBlobClient().GetContainerReference(
+                    String.IsNullOrEmpty(EventStreamContainerName) ? DefaultEventStreamContainerName : EventStreamContainerName);
+                Log.TargetStorageContainer(EventStreamContainer.Uri.ToString());
+
+                if (await EventStreamContainer.CreateIfNotExistsAsync())
+                {
+                    Log.CreatedStorageContainer();
+                }
+
+                // MinPurgeAge should be at least MinPurgeAgeCap
+                MinPurgeAge = MinPurgeAge > MinPurgeAgeCap ? MinPurgeAge : MinPurgeAgeCap;
+                Log.MinPurgeAge(MinPurgeAge.ToString());
+
+                // MaxPurgeRecords should be less than MaxRecordsCap
+                MaxPurgeRecords = Math.Min(MaxPurgeRecords, MaxRecordsCap);
+                Log.MaxPurgeRecords(MaxPurgeRecords);
+
+                using (var connection = await cstr.ConnectTo())
+                {
+                    Log.ConnectedToDatabase(connection.DataSource, connection.Database, connection.ClientConnectionId);
+                    Log.PurgingAssertionsStarted();
+                    await PurgeAssertions(connection);
+                    Log.PurgingAssertionsCompleted();
+                    Log.DetectingChangesStarted();
+                    await DetectChanges(connection);
+                    Log.DetectingChangesCompleted();
+                }
+                return Complete();
+            }
+        }
+
+        protected internal async override Task<JobContinuation> Resume()
+        {
+            // This job must resume if and only if ReplicateCurrentState is true
+            if (ReplicateCurrentState == false)
+            {
+                throw new InvalidOperationException("This job can only resume when ReplicateCurrentState is true");
+            }
+
+            // Parameters needed to resume this job are TargetDatabaseConnection, MaxUpdateRecords,
+            // ReplicateSegmentKey and ReplicateCurrentState set to true            
+
+            var completed = false;
+            var cstr = GetConnectionString();
             using (var connection = await cstr.ConnectTo())
             {
-                Log.ConnectedToDatabase(connection.DataSource, connection.Database, connection.ClientConnectionId);
-                Log.PurgingAssertionsStarted();
-                await PurgeAssertions(connection);
-                Log.PurgingAssertionsCompleted();
-                Log.DetectingChangesStarted();
-                await DetectChanges(connection);
-                Log.DetectingChangesCompleted();
+                // Get MAX(Key) from packages table
+                var results = await connection.QueryAsync<int>(MetadataEventStreamSQLQueries.MaxKeyInPackages);
+                int maxKey = results.Single();
+
+                // If MAX key < ReplicateSegmentStartKey, Complete the Job
+                if (maxKey < ReplicateSegmentStartKey)
+                {
+                    completed = true;
+                }
+                else
+                {
+                    // Else, Update records between ReplicateSegmentStartKey and (ReplicateSegmentKey + MaxUpdateRecords)
+                    // AND, set the parameters for resuming job and Suspend for a minute
+
+                    var startKey = ReplicateSegmentStartKey - 1;
+                    var endKey = ReplicateSegmentStartKey + MaxUpdateRecords;
+                    await connection.QueryAsync<int>(MetadataEventStreamSQLQueries.TriggerRecords, new { startKey = startKey, endKey = endKey });
+
+                    if (maxKey < endKey)
+                    {
+                        completed = true;
+                    }
+                }
             }
-            return Complete();
+
+            if (completed)
+            {
+                return Complete();
+            }
+            else
+            {
+                var parameters = new Dictionary<string, string>();
+                parameters["TargetDatabaseConnection"] = TargetDatabaseConnection.ConnectionString;
+                parameters["MaxUpdateRecords"] = MaxUpdateRecords.ToString();
+                parameters["ReplicateSegmentStartKey"] = (ReplicateSegmentStartKey + MaxUpdateRecords).ToString();
+                parameters["ReplicateCurrentState"] = true.ToString();
+                return Suspend(TimeSpan.FromMinutes(1), parameters);
+            }
         }
 
         private async Task PurgeAssertions(SqlConnection connection)
