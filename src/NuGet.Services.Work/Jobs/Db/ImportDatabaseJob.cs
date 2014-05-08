@@ -35,7 +35,7 @@ namespace NuGet.Services.Work.Jobs
 
         public string GalleryDBName { get; set; }
 
-        public int RenameRequestCount { get; set; }
+        public int RenameAttempts { get; set; }
 
         public ImportDatabaseJob(ConfigurationHub configHub) : base(configHub) { }
 
@@ -145,7 +145,7 @@ namespace NuGet.Services.Work.Jobs
 
         protected internal override async Task<JobContinuation> Resume()
         {
-            if (RenameRequestCount > 0)
+            if (RenameAttempts > 0)
             {
                 if (TargetDatabaseConnection == null || TargetDatabaseName == null || String.IsNullOrEmpty(GalleryDBName))
                 {
@@ -194,8 +194,8 @@ namespace NuGet.Services.Work.Jobs
                     {
                         Log.ImportCompleted(statusInfo.DatabaseName, helper.ServerName);
 
-                        RenameRequestCount = 1;
                         // Now, that the import is complete, rename DB
+                        RenameAttempts = 1;
                         return await RenameImportedDBToGalleryDB();
                     }
 
@@ -264,7 +264,7 @@ namespace NuGet.Services.Work.Jobs
             }
 
             cstr.TrimNetworkProtocol();
-            Log.PreparingToRename(cstr.DataSource, RenameRequestCount);
+            Log.PreparingToRename(cstr.DataSource, RenameAttempts);
 
             Log.GalleryDBName(GalleryDBName);
 
@@ -331,11 +331,11 @@ namespace NuGet.Services.Work.Jobs
             }
 
             // While import has already completed successfully, Rename failed for some reason
-            // We will try again later if RenameRequestCount is less than 5
-            if (RenameRequestCount < 5)
+            // We will try again later if RenameAttempts is less than 5
+            if (RenameAttempts < 5)
             {
                 var parameters = new Dictionary<string, string>();
-                parameters["RenameRequestCount"] = (RenameRequestCount + 1).ToString();
+                parameters["RenameAttempts"] = (RenameAttempts + 1).ToString();
                 parameters["TargetDatabaseConnection"] = TargetDatabaseConnection.ConnectionString;
                 parameters["TargetDatabaseName"] = TargetDatabaseName;
                 parameters["GalleryDBName"] = GalleryDBName;
@@ -443,7 +443,7 @@ namespace NuGet.Services.Work.Jobs
             eventId: 21,
             Level = EventLevel.Informational,
             Message = "Preparing to rename databases on '{0}'. Attempt : {1}")]
-        public void PreparingToRename(string server, int attempt) { WriteEvent(21, server, attempt); }
+        public void PreparingToRename(string server, int renameAttempts) { WriteEvent(21, server, renameAttempts); }
 
         [Event(
             eventId: 22,
