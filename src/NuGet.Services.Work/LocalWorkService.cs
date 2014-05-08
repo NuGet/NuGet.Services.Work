@@ -1,11 +1,18 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reactive.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Autofac;
+using Microsoft.Practices.EnterpriseLibrary.SemanticLogging;
+using NuGet.Services.Configuration;
 using NuGet.Services.Hosting;
 using NuGet.Services.ServiceModel;
+using NuGet.Services.Storage;
+using NuGet.Services.Work.Models;
+using NuGet.Services.Work.Monitoring;
 
 namespace NuGet.Services.Work
 {
@@ -19,12 +26,12 @@ namespace NuGet.Services.Work
             Queue = InvocationQueue.Null;
         }
 
-        public static Task<WorkService> Create()
+        public static Task<LocalWorkService> Create()
         {
             return Create(new Dictionary<string, string>());
         }
 
-        public static async Task<WorkService> Create(IDictionary<string, string> configuration)
+        public static async Task<LocalWorkService> Create(IDictionary<string, string> configuration)
         {
             var host = new LocalServiceHost(
                 new NuGetStartOptions()
@@ -50,6 +57,52 @@ namespace NuGet.Services.Work
                 throw new InvalidOperationException(Strings.LocalWorker_FailedToStart);
             }
             return host.GetInstance<LocalWorkService>();
+        }
+
+        public IObservable<EventEntry> RunJob(string job, string payload)
+        {
+            var runner = new JobRunner(
+                new JobDispatcher(
+                    GetAllAvailableJobs(),
+                    Container),
+                InvocationQueue.Null,
+                Container.Resolve<ConfigurationHub>(),
+                Container.Resolve<StorageHub>(),
+                Clock.RealClock);
+
+            var invocation =
+                new InvocationState(
+                    new InvocationState.InvocationRow()
+                    {
+                        Payload = payload,
+                        Status = (int)InvocationStatus.Executing,
+                        Result = (int)ExecutionResult.Incomplete,
+                        Source = Constants.Source_LocalJob,
+                        Id = Guid.NewGuid(),
+                        Job = job,
+                        UpdatedBy = Environment.MachineName,
+                        UpdatedAt = DateTime.UtcNow,
+                        QueuedAt = DateTime.UtcNow,
+                        NextVisibleAt = DateTime.UtcNow + TimeSpan.FromMinutes(5)
+                    });
+            return Observable.Create<EventEntry>(observer =>
+            {
+                var capture = new InvocationLogCapture(invocation);
+                capture.Subscribe(e => observer.OnNext(e), ex => observer.OnError(ex));
+                runner.Dispatch(invocation, capture, CancellationToken.None, includeContinuations: true).ContinueWith(t =>
+                {
+                    if (t.IsFaulted)
+                    {
+                        observer.OnError(t.Exception);
+                    }
+                    else
+                    {
+                        observer.OnCompleted();
+                    }
+                    return t;
+                });
+                return () => { }; // No action on unsubscribe
+            });
         }
     }
 }

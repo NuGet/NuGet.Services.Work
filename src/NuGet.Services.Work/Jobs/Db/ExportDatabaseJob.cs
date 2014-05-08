@@ -16,25 +16,32 @@ using NuGet.Services.Work.Jobs.Models;
 using Microsoft.WindowsAzure.Storage.Blob;
 using Microsoft.WindowsAzure.Storage.Auth;
 using Microsoft.WindowsAzure.Storage;
+using Dapper;
 
 namespace NuGet.Services.Work.Jobs
 {
     [Description("Exports database from primary datacenter to a bacpac file in secondary datacenter")]
     public class ExportDatabaseJob : DatabaseJobHandlerBase<ExportDatabaseEventSource>
     {
-        public static readonly string BackupPrefix = "Backup";
+        public static readonly string DefaultExportPrefix = "export";
+
+        public string ExportPrefix { get; set; }
         public string DestinationStorageAccountName { get; set; }
         
         public string DestinationStorageAccountKey { get; set; }
 
         public string RequestGUID { get; set; }
-
         public string EndPointUri { get; set; }
+
+        public string ExportTimestampUtc { get; set; }
 
         public ExportDatabaseJob(ConfigurationHub configHub) : base(configHub) { }
 
         protected internal override async Task<JobContinuation> Execute()
         {
+            // Capture timestamp
+            var timestamp = DateTime.UtcNow.ToString("O");
+
             // Load Defaults
             var endPointUri = EndPointUri ?? Config.Sql.ExportEndPoint;
             if (String.IsNullOrEmpty(endPointUri))
@@ -75,7 +82,7 @@ namespace NuGet.Services.Work.Jobs
 
             if(TargetDatabaseName == null)
             {
-                throw new InvalidOperationException(String.Format("No database with prefix '{0}' was found to export", BackupPrefix));
+                throw new InvalidOperationException(String.Format("No database with prefix '{0}' was found to export", ExportPrefix));
             }
 
             Log.PreparingToExport(TargetDatabaseName, cstr.DataSource);
@@ -121,6 +128,7 @@ namespace NuGet.Services.Work.Jobs
 
                 var parameters = new Dictionary<string, string>();
                 parameters["RequestGUID"] = requestGUID;
+                parameters["ExportTimestampUtc"] = timestamp;
                 parameters["TargetDatabaseConnection"] = cstr.ConnectionString;
                 parameters["EndPointUri"] = endPointUri;
 
@@ -132,7 +140,7 @@ namespace NuGet.Services.Work.Jobs
             }
         }
 
-        protected internal override Task<JobContinuation> Resume()
+        protected internal override async Task<JobContinuation> Resume()
         {
             if (RequestGUID == null || TargetDatabaseConnection == null || EndPointUri == null)
             {
@@ -161,16 +169,46 @@ namespace NuGet.Services.Work.Jobs
             {
                 var exportedBlobPath = statusInfo.BlobUri;
                 Log.ExportCompleted(exportedBlobPath);
-                return Task.FromResult(Complete());
+
+                // Clean up exports
+                await CleanExports(TargetDatabaseConnection, DateTime.Parse(ExportTimestampUtc));
+
+                return Complete();
             }
 
             Log.Exporting(statusInfo.Status);
 
             var parameters = new Dictionary<string, string>();
             parameters["RequestGUID"] = RequestGUID;
+            parameters["ExportTimestampUtc"] = ExportTimestampUtc;
             parameters["TargetDatabaseConnection"] = TargetDatabaseConnection.ConnectionString;
             parameters["EndPointUri"] = endPointUri;
-            return Task.FromResult(Suspend(TimeSpan.FromMinutes(1), parameters));
+            return Suspend(TimeSpan.FromMinutes(1), parameters);
+        }
+
+        private async Task CleanExports(SqlConnectionStringBuilder cstr, DateTime timestampUtc)
+        {
+            using (var connection = await cstr.ConnectToMaster())
+            {
+                // Get databases
+                var databases = await GetDatabases(connection);
+
+                // Delete matching DBs
+                var toDelete = from d in databases
+                               let backupMeta = d.GetBackupMetadata()
+                               where backupMeta != null &&
+                                    String.Equals(
+                                        ExportPrefix,
+                                        backupMeta.Prefix,
+                                        StringComparison.OrdinalIgnoreCase) &&
+                                    backupMeta.Timestamp.UtcDateTime <= timestampUtc
+                               select d;
+                foreach (var db in toDelete)
+                {
+                    Log.DroppingDatabase(db.name);
+                    await connection.ExecuteAsync("DROP DATABASE [" + db.name + "]");
+                }
+            }
         }
 
         /// <summary>
@@ -191,7 +229,7 @@ namespace NuGet.Services.Work.Jobs
                                 let backupMeta = db.GetBackupMetadata()
                                 where backupMeta != null &&
                                     String.Equals(
-                                        BackupPrefix,
+                                        ExportPrefix,
                                         backupMeta.Prefix,
                                         StringComparison.OrdinalIgnoreCase)
                                 orderby backupMeta.Timestamp descending
@@ -299,5 +337,11 @@ namespace NuGet.Services.Work.Jobs
             Level = EventLevel.Informational,
             Message = "HttpWebResponse error description. Status : {0}")]
         public void ErrorStatusDescription(string statusDescription) { WriteEvent(14, statusDescription); }
+
+        [Event(
+            eventId: 15,
+            Level = EventLevel.Informational,
+            Message = "Dropping export: {0}")]
+        public void DroppingDatabase(string db) { WriteEvent(15, db); }
     }
 }

@@ -13,12 +13,22 @@ namespace NuGet.Services.Work
         where TEventSource : EventSource
     {
         private TEventSource _log = EventSourceInstanceManager.Get<TEventSource>();
+        private IList<EventSource> _additionalSources = new List<EventSource>();
 
         public TEventSource Log { get { return _log; } }
 
-        public override EventSource GetEventSource()
+        public override IEnumerable<EventSource> GetEventSources()
         {
-            return Log;
+            yield return Log;
+            foreach (var source in _additionalSources)
+            {
+                yield return source;
+            }
+        }
+
+        protected void AddEventSource(EventSource log)
+        {
+            _additionalSources.Add(log);
         }
     }
 
@@ -95,6 +105,15 @@ namespace NuGet.Services.Work
         protected internal virtual Task<JobContinuation> Resume() { return Task.FromResult(Complete()); }
 
         // Helper methods for returning "Suspend" and "Complete" results (even though Complete is just null)
+        protected JobContinuation Suspend(TimeSpan waitPeriod, object parameters)
+        {
+            return Suspend(
+                waitPeriod,
+                (from p in parameters.GetType().GetTypeInfo().DeclaredProperties
+                 select new { p.Name, Value = p.GetValue(parameters) })
+                 .ToDictionary(a => a.Name, a => a.Value.ToString()));
+        }
+
         protected JobContinuation Suspend(TimeSpan waitPeriod, Dictionary<string, string> parameters)
         {
             // TODO: Using a [ContinuationState] or similar attribute, allow the job author

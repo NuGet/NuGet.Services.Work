@@ -118,14 +118,29 @@
     <Reference Include="Microsoft.Practices.EnterpriseLibrary.SemanticLogging.WindowsAzure">
       <HintPath>..\..\packages\EnterpriseLibrary.SemanticLogging.WindowsAzure.1.0.1304.1\lib\NET45\Microsoft.Practices.EnterpriseLibrary.SemanticLogging.WindowsAzure.dll</HintPath>
     </Reference>
+    <Reference Include="Microsoft.Threading.Tasks">
+      <HintPath>..\..\packages\Microsoft.Bcl.Async.1.0.165\lib\net45\Microsoft.Threading.Tasks.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Threading.Tasks.Extensions">
+      <HintPath>..\..\packages\Microsoft.Bcl.Async.1.0.165\lib\net45\Microsoft.Threading.Tasks.Extensions.dll</HintPath>
+    </Reference>
     <Reference Include="Microsoft.Web.XmlTransform">
       <HintPath>..\..\packages\Microsoft.Web.Xdt.1.0.0\lib\net40\Microsoft.Web.XmlTransform.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.WindowsAzure.Common">
+      <HintPath>..\..\packages\Microsoft.WindowsAzure.Common.1.0.2\lib\net45\Microsoft.WindowsAzure.Common.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.WindowsAzure.Common.NetFramework">
+      <HintPath>..\..\packages\Microsoft.WindowsAzure.Common.1.0.2\lib\net45\Microsoft.WindowsAzure.Common.NetFramework.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.WindowsAzure.Configuration, Version=2.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
       <HintPath>..\..\packages\Microsoft.WindowsAzure.ConfigurationManager.2.0.3\lib\net40\Microsoft.WindowsAzure.Configuration.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.WindowsAzure.Diagnostics, Version=2.2.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35">
       <Private>True</Private>
+    </Reference>
+    <Reference Include="Microsoft.WindowsAzure.Management.Sql">
+      <HintPath>..\..\packages\Microsoft.WindowsAzure.Management.Sql.0.9.14-preview\lib\net40\Microsoft.WindowsAzure.Management.Sql.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.WindowsAzure.ServiceRuntime, Version=2.2.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35">
       <Private>False</Private>
@@ -167,6 +182,7 @@
     <Reference Include="System.Data.Entity" />
     <Reference Include="System.Data.Services.Client" />
     <Reference Include="System.IO.Compression" />
+    <Reference Include="System.Net" />
     <Reference Include="System.Net.Http" />
     <Reference Include="System.Net.Http.Extensions">
       <HintPath>..\..\packages\Microsoft.Net.Http.2.2.18\lib\net45\System.Net.Http.Extensions.dll</HintPath>
@@ -219,6 +235,8 @@
     <Compile Include="Api\ModelConverters.cs" />
     <Compile Include="Api\Models\WorkServiceModel.cs" />
     <Compile Include="Api\Routes.cs" />
+    <Compile Include="Azure\AzureHub.cs" />
+    <Compile Include="Azure\AzureHubEventSource.cs" />
     <Compile Include="Configuration\LicenseReportConfiguration.cs" />
     <Compile Include="Configuration\WorkConfiguration.cs" />
     <Compile Include="Constants.cs" />
@@ -242,39 +260,36 @@
     <Compile Include="Infrastructure\InvocationContext.cs" />
     <Compile Include="Infrastructure\UnknownJobException.cs" />
     <Compile Include="JobComponentsModule.cs" />
-    <Compile Include="Jobs\AggregateStatisticsJob.cs" />
-    <Compile Include="Jobs\BackupPackageBlobsJob.cs" />
+    <Compile Include="JobFailureException.cs" />
+    <Compile Include="Jobs\Stats\AggregateStatisticsJob.cs" />
+    <Compile Include="Jobs\Storage\BackupPackageBlobsJob.cs" />
     <Compile Include="Jobs\Bases\ReportGeneratingJobBase.cs" />
     <Compile Include="Jobs\Bases\SearchIndexJobHandlerBase.cs" />
-    <Compile Include="Jobs\CalculateStatsTotalsJob.cs" />
-    <Compile Include="Jobs\CleanOnlineDatabaseBackupsJob.cs" />
+    <Compile Include="Jobs\Stats\CalculateStatsTotalsJob.cs" />
     <Compile Include="Jobs\Bases\DatabaseJobHandlerBase.cs" />
-    <Compile Include="Jobs\MaintainDatabaseIndexesJob.cs" />
-    <Compile Include="Jobs\CreateWarehouseReportsJob.cs" />
-    <Compile Include="Jobs\MetadataEventStreamJob.cs" />
-    <Compile Include="Jobs\ExportDatabaseJob.cs" />
-    <Compile Include="Jobs\GenerateDownloadCountReportJob.cs" />
-    <Compile Include="Jobs\GenerateSearchRankingsJob.cs" />
+    <Compile Include="Jobs\Stats\CreateWarehouseReportsJob.cs" />
+    <Compile Include="Jobs\Db\ExportDatabaseJob.cs" />
+    <Compile Include="Jobs\Search\GenerateDownloadCountReportJob.cs" />
+    <Compile Include="Jobs\Search\GenerateSearchRankingsJob.cs" />
     <Compile Include="Jobs\HandlePackageEditsJob.cs" />
-    <Compile Include="Jobs\ImportDatabaseJob.cs" />
     <Compile Include="Jobs\Models\PackageAssertionSet.cs" />
+    <Compile Include="Jobs\Db\ImportDatabaseJob.cs" />
     <Compile Include="Jobs\Models\PackageEdit.cs" />
     <Compile Include="Jobs\Models\PackageRef.cs" />
     <Compile Include="Jobs\Models\SearchRankingEntry.cs" />
-    <Compile Include="Jobs\PurgeCompletedInvocationsJob.cs" />
-    <Compile Include="Jobs\PurgePackageStatisticsJob.cs" />
-    <Compile Include="Jobs\RebuildSearchIndexJob.cs" />
-    <Compile Include="Jobs\ReplicatePackageStatisticsJob.cs" />
-    <Compile Include="Jobs\SyncPackagesFromBackupJob.cs" />
-    <Compile Include="Jobs\TestAsyncJob.cs" />
-    <Compile Include="Jobs\CreateOnlineDatabaseBackupJob.cs" />
-    <Compile Include="Jobs\TestHeartBeatJob.cs" />
-    <Compile Include="Jobs\TestLongRunningJob.cs" />
+    <Compile Include="Jobs\WorkService\PurgeCompletedInvocationsJob.cs" />
+    <Compile Include="Jobs\Stats\PurgePackageStatisticsJob.cs" />
+    <Compile Include="Jobs\Search\RebuildSearchIndexJob.cs" />
+    <Compile Include="Jobs\Stats\ReplicatePackageStatisticsJob.cs" />
+    <Compile Include="Jobs\Db\CopyDatabaseJob.cs" />
+    <Compile Include="Jobs\Storage\SyncPackagesFromBackupJob.cs" />
+    <Compile Include="Jobs\WorkService\TestAsyncJob.cs" />
+    <Compile Include="Jobs\WorkService\TestLongRunningJob.cs" />
     <Compile Include="Jobs\Models\Database.cs" />
-    <Compile Include="Jobs\TestPingJob.cs" />
-    <Compile Include="Jobs\TransferBackupPackagesJob.cs" />
+    <Compile Include="Jobs\WorkService\TestPingJob.cs" />
+    <Compile Include="Jobs\Storage\TransferBackupPackagesJob.cs" />
     <Compile Include="Jobs\UpdateLicenseReportsJob.cs" />
-    <Compile Include="Jobs\UpdateSearchIndexJob.cs" />
+    <Compile Include="Jobs\Search\UpdateSearchIndexJob.cs" />
     <Compile Include="LocalWorkService.cs" />
     <Compile Include="Monitoring\EventSourceWriter.cs" />
     <Compile Include="ServiceReferences\DACWebServiceReference.cs" />
@@ -333,6 +348,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Jobs\Scripts\MetadataEventStream_CreateLogTables.sql" />
   </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="..\..\packages\Microsoft.Bcl.Build.1.0.13\tools\Microsoft.Bcl.Build.targets" Condition="Exists('..\..\packages\Microsoft.Bcl.Build.1.0.13\tools\Microsoft.Bcl.Build.targets')" />
   <Target Name="EnsureBclBuildImported" BeforeTargets="BeforeBuild" Condition="'$(BclBuildImported)' == ''">
