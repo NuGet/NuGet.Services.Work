@@ -18,7 +18,7 @@ namespace NuGet.Services.Work.Models
         [InlineData("Backup_12Nov2013_2043")] // Wrong timestamp format (missing trailing "Z")
         public void ReturnsNullForNonMatchingDatabaseName(string name)
         {
-            Assert.Null(DatabaseBackup.Create(new Database() { name = name }));
+            Assert.Null(DatabaseBackup<SqlDatabase>.Create(new SqlDatabase() { name = name }));
         }
 
         [Theory]
@@ -29,7 +29,7 @@ namespace NuGet.Services.Work.Models
         [InlineData("WarehouseBackup_1924Dec12_0042Z", "WarehouseBackup", "1924-12-12T00:42:00")]
         public void ParsesMatchingNameCorrectly(string name, string prefix, string expectedTimestamp)
         {
-            var parsed = DatabaseBackup.Create(new Database() { name = name });
+            var parsed = DatabaseBackup<SqlDatabase>.Create(new SqlDatabase() { name = name });
             Assert.NotNull(parsed);
             Assert.Equal(prefix, parsed.Prefix);
             Assert.Equal(expectedTimestamp, parsed.Timestamp.ToString("s"));

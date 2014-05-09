@@ -117,18 +117,6 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
-  <data name="AzureHub_MissingCertificate" xml:space="preserve">
-    <value>Could not find an Azure Management Certificate. Use the "Azure.ManagementCertThumbprint" config setting to specify one.</value>
-  </data>
-  <data name="AzureHub_MissingSubscription" xml:space="preserve">
-    <value>Could not identify the Azure Subscription for the current environment. Use the "Azure.SubscriptionId" and "Azure.SubscriptionName" config settings to specify it.</value>
-  </data>
-  <data name="AzureHub_MissingSubscriptionConfigSetting" xml:space="preserve">
-    <value>"{0}" was specified in configuration, but "{1}" was not. BOTH "Azure.SubscriptionId" and "Azure.SubscriptionName" MUST be specified if one is specified.</value>
-  </data>
-  <data name="AzureHub_NullThumbprint" xml:space="preserve">
-    <value>&lt;null&gt;</value>
-  </data>
   <data name="CalculateStatsTotalsJob_NoData" xml:space="preserve">
     <value>Failed to get the Totals from the query -- no records were returned.</value>
   </data>

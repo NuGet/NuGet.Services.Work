@@ -5,19 +5,20 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using Microsoft.WindowsAzure.Management.Sql.Models;
 
 namespace NuGet.Services.Work.Jobs.Models
 {
-    public class Database
+    public class SqlDatabase
     {
         public string name { get; set; }
         public int database_id { get; set; }
         public DateTime create_date { get; set; }
         public DatabaseState state { get; set; }
 
-        public DatabaseBackup GetBackupMetadata()
+        public DatabaseBackup<SqlDatabase> GetBackupMetadata()
         {
-            return DatabaseBackup.Create(this);
+            return DatabaseBackup<SqlDatabase>.Create(this);
         }
 
         public override string ToString()
@@ -26,23 +27,23 @@ namespace NuGet.Services.Work.Jobs.Models
         }
     }
 
-    public class DatabaseBackup {
+    public class DatabaseBackup<TDb> {
         private const string BackupTimestampFormat = "yyyyMMMdd_HHmm";
         private static readonly Regex BackupNameParser = new Regex(@"(?<prefix>[^_]*)_(?<timestamp>\d{4}[A-Z]{3}\d{2}_\d{4})Z", RegexOptions.IgnoreCase);
         private const string BackupNameFormat = "{0}_{1:" + BackupTimestampFormat + "}Z";
 
-        public Database Db { get; private set; }
+        public TDb Db { get; private set; }
         public string Prefix { get; private set; }
         public DateTimeOffset Timestamp { get; private set; }
 
-        public DatabaseBackup(Database db, string prefix, DateTimeOffset timestamp)
+        public DatabaseBackup(TDb db, string prefix, DateTimeOffset timestamp)
         {
             Db = db;
             Prefix = prefix;
             Timestamp = timestamp;
         }
 
-        internal static DatabaseBackup Create(Database db)
+        internal static DatabaseBackup<SqlDatabase> Create(SqlDatabase db)
         {
             var match = BackupNameParser.Match(db.name);
             if (match.Success)
@@ -52,7 +53,22 @@ namespace NuGet.Services.Work.Jobs.Models
                     BackupTimestampFormat,
                     CultureInfo.InvariantCulture,
                     DateTimeStyles.AssumeUniversal);
-                return new DatabaseBackup(db, match.Groups["prefix"].Value, timestamp);
+                return new DatabaseBackup<SqlDatabase>(db, match.Groups["prefix"].Value, timestamp);
+            }
+            return null;
+        }
+
+        internal static DatabaseBackup<Database> Create(Database azureDb)
+        {
+            var match = BackupNameParser.Match(azureDb.Name);
+            if (match.Success)
+            {
+                DateTimeOffset timestamp = DateTimeOffset.ParseExact(
+                    match.Groups["timestamp"].Value,
+                    BackupTimestampFormat,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal);
+                return new DatabaseBackup<Database>(azureDb, match.Groups["prefix"].Value, timestamp);
             }
             return null;
         }
@@ -64,14 +80,14 @@ namespace NuGet.Services.Work.Jobs.Models
 
         public override bool Equals(object obj)
         {
-            DatabaseBackup other = obj as DatabaseBackup;
+            DatabaseBackup<TDb> other = obj as DatabaseBackup<TDb>;
             return other != null && 
-                String.Equals(other.Db.name, Db.name, StringComparison.OrdinalIgnoreCase);
+                Equals(other.Db, Db);
         }
 
         public override int GetHashCode()
         {
-            return Db.name.GetHashCode();
+            return Db.GetHashCode();
         }
     }
 
