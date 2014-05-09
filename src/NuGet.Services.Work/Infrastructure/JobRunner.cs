@@ -21,7 +21,7 @@ namespace NuGet.Services.Work
 {
     public class JobRunner
     {
-        public static readonly TimeSpan DefaultInvisibilityPeriod = TimeSpan.FromMinutes(5);
+        public static readonly TimeSpan DefaultInvisibilityPeriod = TimeSpan.FromMinutes(30);
 
         private TimeSpan _pollInterval;
         private RunnerStatus _status;

@@ -35,7 +35,7 @@ namespace NuGet.Services.Work.Jobs
 
         public string GalleryDBName { get; set; }
 
-        public bool ReadyToRenameDB { get; set; }
+        public int RenameAttempts { get; set; }
 
         public ImportDatabaseJob(ConfigurationHub configHub) : base(configHub) { }
 
@@ -102,15 +102,10 @@ namespace NuGet.Services.Work.Jobs
             {
                 Log.DatabaseAlreadyExists("Database {0} already exists.Skipping...", TargetDatabaseName);
 
-                // DB may not be ready for rename operation
-                // This resulted in intermittent failures
-                // So, Suspend to rename database
-                var parameters = new Dictionary<string, string>();
-                parameters["TargetDatabaseConnection"] = cstr.ConnectionString;
-                parameters["TargetDatabaseName"] = TargetDatabaseName;
-                parameters["GalleryDBName"] = GalleryDBName;
-                parameters["ReadyToRenameDB"] = true.ToString();
-                return Suspend(TimeSpan.FromMinutes(5), parameters);
+                // If we reached this point, certainly, the import is incomplete/failed
+                // Because, if RENAME failed after a successful import, we keep trying again until rename is successful
+                // If import failed, we do not RENAME at all. So, DO NOT RENAME HERE
+                return Complete();
             }
 
             WASDImportExport.ImportExportHelper helper = new WASDImportExport.ImportExportHelper()
@@ -150,14 +145,13 @@ namespace NuGet.Services.Work.Jobs
 
         protected internal override async Task<JobContinuation> Resume()
         {
-            if (ReadyToRenameDB)
+            if (RenameAttempts > 0)
             {
                 if (TargetDatabaseConnection == null || TargetDatabaseName == null || String.IsNullOrEmpty(GalleryDBName))
                 {
                     throw new ArgumentNullException("Job could not resume properly due to incorrect parameters");
                 }
-                await RenameImportedDBToGalleryDB();
-                return Complete();
+                return await RenameImportedDBToGalleryDB();
             }
             else
             {
@@ -176,31 +170,37 @@ namespace NuGet.Services.Work.Jobs
                     DatabaseName = TargetDatabaseName,
                 };
 
-                var statusInfoList = helper.CheckRequestStatus(RequestGUID);
-                var statusInfo = statusInfoList.FirstOrDefault();
+                DACWebService.StatusInfo statusInfo = null;
 
-                if (statusInfo.Status == "Failed")
+                try
                 {
-                    Log.ImportFailed(statusInfo.ErrorMessage);
-                    throw new Exception(statusInfo.ErrorMessage);
+                    var statusInfoList = helper.CheckRequestStatus(RequestGUID);
+                    statusInfo = statusInfoList.FirstOrDefault();
+                }
+                catch (Exception ex)
+                {
+                    Log.Exception(ex.Message);
                 }
 
-                if (statusInfo.Status == "Completed")
+                if (statusInfo != null)
                 {
-                    Log.ImportCompleted(statusInfo.DatabaseName, helper.ServerName);
+                    if (statusInfo.Status == "Failed")
+                    {
+                        Log.ImportFailed(statusInfo.ErrorMessage);
+                        throw new Exception(statusInfo.ErrorMessage);
+                    }
 
-                    // Recently imported DB may not be ready for rename operation
-                    // This resulted in intermittent failures
-                    // So, Suspend to rename database
-                    var parametersToRename = new Dictionary<string, string>();
-                    parametersToRename["TargetDatabaseConnection"] = TargetDatabaseConnection.ConnectionString;
-                    parametersToRename["TargetDatabaseName"] = TargetDatabaseName;
-                    parametersToRename["ReadyToRenameDB"] = true.ToString();
-                    parametersToRename["GalleryDBName"] = GalleryDBName;
-                    return Suspend(TimeSpan.FromMinutes(5), parametersToRename);
+                    if (statusInfo.Status == "Completed")
+                    {
+                        Log.ImportCompleted(statusInfo.DatabaseName, helper.ServerName);
+
+                        // Now, that the import is complete, rename DB
+                        RenameAttempts = 1;
+                        return await RenameImportedDBToGalleryDB();
+                    }
+
+                    Log.Importing(statusInfo.Status);
                 }
-
-                Log.Importing(statusInfo.Status);
 
                 var parameters = new Dictionary<string, string>();
                 parameters["RequestGUID"] = RequestGUID;
@@ -255,7 +255,7 @@ namespace NuGet.Services.Work.Jobs
             }
         }
 
-        private async Task RenameImportedDBToGalleryDB()
+        private async Task<JobContinuation> RenameImportedDBToGalleryDB()
         {
             var cstr = TargetDatabaseConnection;
             if (cstr == null || cstr.InitialCatalog == null || cstr.Password == null || cstr.DataSource == null || cstr.UserID == null)
@@ -264,63 +264,87 @@ namespace NuGet.Services.Work.Jobs
             }
 
             cstr.TrimNetworkProtocol();
-            Log.PreparingToRename(cstr.DataSource);
+            Log.PreparingToRename(cstr.DataSource, RenameAttempts);
 
             Log.GalleryDBName(GalleryDBName);
 
-            using (SqlConnection connection = await cstr.ConnectToMaster())
+            try
             {
-                Log.ConnectedToMaster();
-
-                var backupDatabase = await GetDatabase(connection, TargetDatabaseName);
-                if (backupDatabase == null)
+                using (SqlConnection connection = await cstr.ConnectToMaster())
                 {
-                    throw new ArgumentException("Backup Database not found");
-                }
+                    Log.ConnectedToMaster();
 
-                var backupName = backupDatabase.name;
-                Log.BackupName(backupName);
-
-                var galleryDatabase = await GetDatabase(connection, GalleryDBName);
-                if (galleryDatabase == null)
-                {
-                    Log.GalleryDatabaseNotFound(GalleryDBName);
-                    // NO Gallery Database was found. This is BAD
-                    // Simply rename latest backup database to GalleryDatabase and bail
-                    await connection.ExecuteAsync(String.Format(RenameDatabase, backupName, GalleryDBName));
-                    return;
-                }
-
-                // If Gallery Database was found and latest backup was available
-                // Check if GalleryDatabase is newer than latest backup
-                // If so, ignore. Otherwise, Rename
-                if (backupDatabase.create_date > galleryDatabase.create_date)
-                {
-                    Log.RenameNeeded();
-
-                    var tempBackupDatabase = await GetDatabase(connection, TempBackupName);
-                    if (tempBackupDatabase != null)
+                    var backupDatabase = await GetDatabase(connection, TargetDatabaseName);
+                    if (backupDatabase == null)
                     {
-                        Log.DroppingExistingTempBackup(tempBackupDatabase.ToString());
-                        await connection.ExecuteAsync(String.Format(DropDatabase, tempBackupDatabase.name));
-                        Log.DroppedTempBackup();
+                        throw new ArgumentException("Backup Database not found");
                     }
 
-                    Log.RenamingBackupToTemp(backupName, TempBackupName);
-                    await connection.ExecuteAsync(String.Format(RenameDatabase, backupName, TempBackupName));
-                    Log.RenamedBackupToTemp();
-                    Log.RenamingNuGetGalleryToBackup(GalleryDBName, backupName);
-                    await connection.ExecuteAsync(String.Format(RenameDatabase, GalleryDBName, backupName));
-                    Log.RenamedNuGetGalleryToBackup();
-                    Log.RenamingTempToNuGetGallery(TempBackupName, GalleryDBName);
-                    await connection.ExecuteAsync(String.Format(RenameDatabase, TempBackupName, GalleryDBName));
-                    Log.RenamedTempToNuGetGallery();
+                    var backupName = backupDatabase.name;
+                    Log.BackupName(backupName);
+
+                    var galleryDatabase = await GetDatabase(connection, GalleryDBName);
+                    if (galleryDatabase == null)
+                    {
+                        Log.GalleryDatabaseNotFound(GalleryDBName);
+                        // NO Gallery Database was found. This is BAD
+                        // Simply rename latest backup database to GalleryDatabase and bail
+                        await connection.ExecuteAsync(String.Format(RenameDatabase, backupName, GalleryDBName));
+                        return Complete();
+                    }
+
+                    // If Gallery Database was found and latest backup was available
+                    // Check if GalleryDatabase is newer than latest backup
+                    // If so, ignore. Otherwise, Rename
+                    if (backupDatabase.create_date > galleryDatabase.create_date)
+                    {
+                        Log.RenameNeeded();
+
+                        var tempBackupDatabase = await GetDatabase(connection, TempBackupName);
+                        if (tempBackupDatabase != null)
+                        {
+                            Log.DroppingExistingTempBackup(tempBackupDatabase.ToString());
+                            await connection.ExecuteAsync(String.Format(DropDatabase, tempBackupDatabase.name));
+                            Log.DroppedTempBackup();
+                        }
+
+                        Log.RenamingBackupToTemp(backupName, TempBackupName);
+                        await connection.ExecuteAsync(String.Format(RenameDatabase, backupName, TempBackupName));
+                        Log.RenamedBackupToTemp();
+                        Log.RenamingNuGetGalleryToBackup(GalleryDBName, backupName);
+                        await connection.ExecuteAsync(String.Format(RenameDatabase, GalleryDBName, backupName));
+                        Log.RenamedNuGetGalleryToBackup();
+                        Log.RenamingTempToNuGetGallery(TempBackupName, GalleryDBName);
+                        await connection.ExecuteAsync(String.Format(RenameDatabase, TempBackupName, GalleryDBName));
+                        Log.RenamedTempToNuGetGallery();
+                    }
+                    else
+                    {
+                        Log.NoRenameNeeded();
+                    }
                 }
-                else
-                {
-                    Log.NoRenameNeeded();
-                }
+                return Complete();
             }
+            catch (SqlException ex)
+            {
+                Log.Exception(ex.Message);
+            }
+
+            // While import has already completed successfully, Rename failed for some reason
+            // We will try again later if RenameAttempts is less than 5
+            if (RenameAttempts < 5)
+            {
+                var parameters = new Dictionary<string, string>();
+                parameters["RenameAttempts"] = (RenameAttempts + 1).ToString();
+                parameters["TargetDatabaseConnection"] = TargetDatabaseConnection.ConnectionString;
+                parameters["TargetDatabaseName"] = TargetDatabaseName;
+                parameters["GalleryDBName"] = GalleryDBName;
+
+                return Suspend(TimeSpan.FromMinutes(3), parameters);
+            }
+
+            // Else, We throw and fail
+            throw new Exception("Rename DB did not succeed for 5 attempts");
         }
     }
 
@@ -418,8 +442,8 @@ namespace NuGet.Services.Work.Jobs
         [Event(
             eventId: 21,
             Level = EventLevel.Informational,
-            Message = "Preparing to rename databases on '{0}'")]
-        public void PreparingToRename(string server) { WriteEvent(21, server); }
+            Message = "Preparing to rename databases on '{0}'. Attempt : {1}")]
+        public void PreparingToRename(string server, int renameAttempts) { WriteEvent(21, server, renameAttempts); }
 
         [Event(
             eventId: 22,
@@ -510,5 +534,11 @@ namespace NuGet.Services.Work.Jobs
             Level = EventLevel.Informational,
             Message = "Dropped Temp Backup database")]
         public void DroppedTempBackup() { WriteEvent(36); }
+
+        [Event(
+            eventId: 37,
+            Level = EventLevel.Informational,
+            Message = "Exception Caught. Message: {0}. Moving on...")]
+        public void Exception(string message) { WriteEvent(37); }
     }
 }
