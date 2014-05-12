@@ -52,26 +52,26 @@ namespace NuGet.Services.Work.Jobs
             return connection;
         }
 
-        protected internal virtual async Task<Database> GetDatabase(SqlConnection connection, string name)
+        protected internal virtual async Task<SqlDatabase> GetDatabase(SqlConnection connection, string name)
         {
-            return (await connection.QueryAsync<Database>(@"
+            return (await connection.QueryAsync<SqlDatabase>(@"
                 SELECT name, database_id, create_date, state
                 FROM sys.databases
                 WHERE name = @name
             ", new { name })).FirstOrDefault();
         }
 
-        protected internal virtual Task<IEnumerable<Database>> GetDatabases(SqlConnection connection)
+        protected internal virtual Task<IEnumerable<SqlDatabase>> GetDatabases(SqlConnection connection)
         {
-            return connection.QueryAsync<Database>(@"
+            return connection.QueryAsync<SqlDatabase>(@"
                 SELECT name, database_id, create_date, state
                 FROM sys.databases
             ");
         }
 
-        protected internal virtual Task<IEnumerable<Database>> GetDatabases(SqlConnection connection, DatabaseState state)
+        protected internal virtual Task<IEnumerable<SqlDatabase>> GetDatabases(SqlConnection connection, DatabaseState state)
         {
-            return connection.QueryAsync<Database>(@"
+            return connection.QueryAsync<SqlDatabase>(@"
                 SELECT name, database_id, create_date, state
                 FROM sys.databases
                 WHERE state = @state

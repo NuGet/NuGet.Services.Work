@@ -15,6 +15,7 @@
     <Name>NuGet.Services.Work.Cloud</Name>
     <TargetProfile>Local</TargetProfile>
     <PackageEnableRemoteDebugger>True</PackageEnableRemoteDebugger>
+    <UseWebProjectPorts>False</UseWebProjectPorts>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>

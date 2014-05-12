@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="..\..\packages\NuGet.Services.Build.3.0.4-rel-4\build\NuGet.Services.Build.props" Condition="Exists('..\..\packages\NuGet.Services.Build.3.0.4-rel-4\build\NuGet.Services.Build.props')" />
+  <Import Project="..\..\packages\NuGet.Services.Build.3.0.5\build\NuGet.Services.Build.props" Condition="Exists('..\..\packages\NuGet.Services.Build.3.0.5\build\NuGet.Services.Build.props')" />
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
@@ -15,7 +15,7 @@
     <FileAlignment>512</FileAlignment>
     <RoleType>Worker</RoleType>
     <BuildPackage>true</BuildPackage>
-    <NuGetPackageImportStamp>70205e5f</NuGetPackageImportStamp>
+    <NuGetPackageImportStamp>bbd4612f</NuGetPackageImportStamp>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -127,11 +127,13 @@
     <Reference Include="Microsoft.Web.XmlTransform">
       <HintPath>..\..\packages\Microsoft.Web.Xdt.1.0.0\lib\net40\Microsoft.Web.XmlTransform.dll</HintPath>
     </Reference>
-    <Reference Include="Microsoft.WindowsAzure.Common">
-      <HintPath>..\..\packages\Microsoft.WindowsAzure.Common.1.0.2\lib\net45\Microsoft.WindowsAzure.Common.dll</HintPath>
+    <Reference Include="Microsoft.WindowsAzure.Common, Version=1.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\packages\Microsoft.WindowsAzure.Common.1.0.3\lib\net45\Microsoft.WindowsAzure.Common.dll</HintPath>
     </Reference>
-    <Reference Include="Microsoft.WindowsAzure.Common.NetFramework">
-      <HintPath>..\..\packages\Microsoft.WindowsAzure.Common.1.0.2\lib\net45\Microsoft.WindowsAzure.Common.NetFramework.dll</HintPath>
+    <Reference Include="Microsoft.WindowsAzure.Common.NetFramework, Version=1.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\packages\Microsoft.WindowsAzure.Common.1.0.3\lib\net45\Microsoft.WindowsAzure.Common.NetFramework.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.WindowsAzure.Configuration, Version=2.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
       <HintPath>..\..\packages\Microsoft.WindowsAzure.ConfigurationManager.2.0.3\lib\net40\Microsoft.WindowsAzure.Configuration.dll</HintPath>
@@ -157,21 +159,21 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\packages\NuGet.Core.2.8.1\lib\net40-Client\NuGet.Core.dll</HintPath>
     </Reference>
-    <Reference Include="NuGet.Indexing, Version=3.0.16.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="NuGet.Indexing, Version=3.0.19.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\packages\NuGet.Indexing.3.0.16-r-master\lib\net45\NuGet.Indexing.dll</HintPath>
+      <HintPath>..\..\packages\NuGet.Indexing.3.0.19-r-master\lib\net45\NuGet.Indexing.dll</HintPath>
     </Reference>
-    <Reference Include="NuGet.Services.Platform, Version=3.0.11.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="NuGet.Services.Platform, Version=3.0.16.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\packages\NuGet.Services.Platform.3.0.11-r-master\lib\net45\NuGet.Services.Platform.dll</HintPath>
+      <HintPath>..\..\packages\NuGet.Services.Platform.3.0.16-r-master\lib\net45\NuGet.Services.Platform.dll</HintPath>
     </Reference>
-    <Reference Include="NuGet.Services.Platform.Client, Version=3.0.11.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="NuGet.Services.Platform.Client, Version=3.0.16.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\packages\NuGet.Services.Platform.Client.3.0.11-r-master\lib\portable-net45+wp80+win\NuGet.Services.Platform.Client.dll</HintPath>
+      <HintPath>..\..\packages\NuGet.Services.Platform.Client.3.0.16-r-master\lib\portable-net45+wp80+win\NuGet.Services.Platform.Client.dll</HintPath>
     </Reference>
-    <Reference Include="NuGetGallery.Core, Version=3.0.5.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="NuGetGallery.Core, Version=3.0.31.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\packages\NuGetGallery.Core.3.0.5-r-master\lib\net45\NuGetGallery.Core.dll</HintPath>
+      <HintPath>..\..\packages\NuGetGallery.Core.3.0.31-r-master\lib\net45\NuGetGallery.Core.dll</HintPath>
     </Reference>
     <Reference Include="Owin">
       <HintPath>..\..\packages\Owin.1.0\lib\net40\Owin.dll</HintPath>
@@ -235,8 +237,6 @@
     <Compile Include="Api\ModelConverters.cs" />
     <Compile Include="Api\Models\WorkServiceModel.cs" />
     <Compile Include="Api\Routes.cs" />
-    <Compile Include="Azure\AzureHub.cs" />
-    <Compile Include="Azure\AzureHubEventSource.cs" />
     <Compile Include="Configuration\LicenseReportConfiguration.cs" />
     <Compile Include="Configuration\WorkConfiguration.cs" />
     <Compile Include="Constants.cs" />
@@ -247,6 +247,7 @@
     <Compile Include="Helpers\MetadataEventStreamSQLQueries.cs" />
     <Compile Include="Helpers\StorageHelpers.cs" />
     <Compile Include="Helpers\ResourceHelpers.cs" />
+    <Compile Include="Helpers\Utils.cs" />
     <Compile Include="Infrastructure\ImportExportHelper.cs" />
     <Compile Include="Infrastructure\InvalidJobRequestException.cs" />
     <Compile Include="Infrastructure\InvocationState.cs" />
@@ -261,6 +262,7 @@
     <Compile Include="Infrastructure\UnknownJobException.cs" />
     <Compile Include="JobComponentsModule.cs" />
     <Compile Include="JobFailureException.cs" />
+    <Compile Include="Jobs\Db\CleanDatabasesJob.cs" />
     <Compile Include="Jobs\Db\MaintainDatabaseIndexesJob.cs" />
     <Compile Include="Jobs\MetadataEventStreamJob.cs" />
     <Compile Include="Jobs\Stats\AggregateStatisticsJob.cs" />
@@ -361,10 +363,10 @@
     <PropertyGroup>
       <ErrorText>This project references NuGet package(s) that are missing on this computer. Enable NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
     </PropertyGroup>
-    <Error Condition="!Exists('..\..\packages\NuGet.Services.Build.3.0.4-rel-4\build\NuGet.Services.Build.props')" Text="$([System.String]::Format('$(ErrorText)', '..\..\packages\NuGet.Services.Build.3.0.4-rel-4\build\NuGet.Services.Build.props'))" />
-    <Error Condition="!Exists('..\..\packages\NuGet.Services.Build.3.0.4-rel-4\build\NuGet.Services.Build.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\..\packages\NuGet.Services.Build.3.0.4-rel-4\build\NuGet.Services.Build.targets'))" />
+    <Error Condition="!Exists('..\..\packages\NuGet.Services.Build.3.0.5\build\NuGet.Services.Build.props')" Text="$([System.String]::Format('$(ErrorText)', '..\..\packages\NuGet.Services.Build.3.0.5\build\NuGet.Services.Build.props'))" />
+    <Error Condition="!Exists('..\..\packages\NuGet.Services.Build.3.0.5\build\NuGet.Services.Build.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\..\packages\NuGet.Services.Build.3.0.5\build\NuGet.Services.Build.targets'))" />
   </Target>
-  <Import Project="..\..\packages\NuGet.Services.Build.3.0.4-rel-4\build\NuGet.Services.Build.targets" Condition="Exists('..\..\packages\NuGet.Services.Build.3.0.4-rel-4\build\NuGet.Services.Build.targets')" />
+  <Import Project="..\..\packages\NuGet.Services.Build.3.0.5\build\NuGet.Services.Build.targets" Condition="Exists('..\..\packages\NuGet.Services.Build.3.0.5\build\NuGet.Services.Build.targets')" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">

@@ -12,6 +12,7 @@ using Microsoft.WindowsAzure.Management.Sql;
 using Microsoft.WindowsAzure.Management.Sql.Models;
 using NuGet.Services.Configuration;
 using NuGet.Services.Work.Azure;
+using NuGet.Services.Work.Helpers;
 
 namespace NuGet.Services.Work.Jobs
 {
@@ -25,9 +26,12 @@ namespace NuGet.Services.Work.Jobs
         public string TargetDatabaseName { get; set; }
         public string TargetDatabaseNamePrefix { get; set; }
 
+        public TimeSpan? Timeout { get; set; }
+        public DateTime? Start { get; set; }
+
         public string CopyOperationId { get; set; }
         public string CopyName { get; set; }
-        
+
         protected AzureHub Azure { get; set; }
         protected ConfigurationHub Config { get; set; }
 
@@ -39,11 +43,13 @@ namespace NuGet.Services.Work.Jobs
 
         protected internal override async Task<JobContinuation> Execute()
         {
+            Start = DateTime.UtcNow;
+
             // Defaults:
             //  SourceServerName = Sql.Legacy Server Name
             //  SourceDatabaseName = Sql.Legacy DB Name
             //  TargetServerName = SourceServerName
-            SourceServerName = String.IsNullOrEmpty(SourceServerName) ? GetServerName(Config.Sql.Legacy.DataSource) : SourceServerName;
+            SourceServerName = String.IsNullOrEmpty(SourceServerName) ? Utils.GetSqlServerName(Config.Sql.Legacy.DataSource) : SourceServerName;
             SourceDatabaseName = String.IsNullOrEmpty(SourceDatabaseName) ? Config.Sql.Legacy.InitialCatalog : SourceDatabaseName;
             TargetServerName = String.IsNullOrEmpty(TargetServerName) ? SourceServerName : TargetServerName;
 
@@ -56,7 +62,7 @@ namespace NuGet.Services.Work.Jobs
 
             Log.BeginningDatabaseCopyProcess(SourceServerName, SourceDatabaseName, TargetServerName, TargetDatabaseName, CopyName);
 
-            using (var sql = CloudContext.Clients.CreateSqlManagementClient(Azure.GetCredentials()))
+            using (var sql = CloudContext.Clients.CreateSqlManagementClient(Azure.GetCredentials(throwIfMissing: true)))
             {
                 // 1. Start the copy to a unique-named database
 
@@ -80,7 +86,7 @@ namespace NuGet.Services.Work.Jobs
 
         protected internal override async Task<JobContinuation> Resume()
         {
-            using (var sql = CloudContext.Clients.CreateSqlManagementClient(Azure.GetCredentials()))
+            using (var sql = CloudContext.Clients.CreateSqlManagementClient(Azure.GetCredentials(throwIfMissing: true)))
             {
                 // 2. Check the status of the copy
                 Log.CheckingCopyStatus(CopyOperationId);
@@ -97,7 +103,17 @@ namespace NuGet.Services.Work.Jobs
                         // Copy failed! Fail the whole job
                         throw new JobFailureException(op.Error);
                     default:
-                        // Copy is still in progress, save state and wait for another five minutes
+                        // Copy is still in progress, check for timeout
+                        if (Timeout.HasValue && ((DateTime.UtcNow - Context.Invocation.QueuedAt.UtcDateTime) >= Timeout.Value))
+                        {
+                            // Abort the copy
+                            Log.AbortingCopy(SourceServerName, SourceDatabaseName);
+                            await sql.Databases.DeleteAsync(TargetServerName, CopyName);
+                            Log.AbortedCopy(SourceServerName, SourceDatabaseName);
+                            throw new JobFailureException("Copy operation exceeded timeout and was aborted.");
+                        }
+                        
+                        // Save state and wait for another five minutes
                         Log.CopyInProgress(op.PercentComplete);
                         return Suspend(TimeSpan.FromMinutes(5), new {
                             SourceServerName,
@@ -105,7 +121,9 @@ namespace NuGet.Services.Work.Jobs
                             TargetServerName,
                             TargetDatabaseName,
                             CopyName,
-                            CopyOperationId
+                            CopyOperationId,
+                            Timeout,
+                            Start
                         });
                 }
             }
@@ -185,17 +203,6 @@ namespace NuGet.Services.Work.Jobs
                     Log.DeletedOldCopy();
                 }
             }
-        }
-
-        private static readonly Regex ServerNameMatcher = new Regex(@"(tcp:)?(?<servername>[A-Za-z0-9]*)(\.database\.windows\.net)?");
-        private static string GetServerName(string fullName)
-        {
-            var match = ServerNameMatcher.Match(fullName);
-            if (match.Success)
-            {
-                return match.Groups["servername"].Value;
-            }
-            return fullName;
         }
     }
 
@@ -350,6 +357,22 @@ namespace NuGet.Services.Work.Jobs
             Message = "Completed copy of {0}/{1} to {2}/{3}!")]
         public void CompletedDatabaseCopyProcess(string sourceServer, string sourceDatabase, string targetServer, string targetDatabase) { WriteEvent(18, sourceServer, sourceDatabase, targetServer, targetDatabase); }
 
+        [Event(
+            eventId: 19,
+            Task = Tasks.AbortingCopy,
+            Opcode = EventOpcode.Start,
+            Level = EventLevel.Error,
+            Message = "Timeout elapsed! Aborting copy of {0}/{1}!")]
+        public void AbortingCopy(string sourceServer, string sourceDatabase) { WriteEvent(19, sourceServer, sourceDatabase); }
+
+        [Event(
+            eventId: 20,
+            Task = Tasks.AbortingCopy,
+            Opcode = EventOpcode.Stop,
+            Level = EventLevel.Error,
+            Message = "Aborted copy of {0}/{1}!")]
+        public void AbortedCopy(string sourceServer, string sourceDatabase) { WriteEvent(20, sourceServer, sourceDatabase); }
+
         public static class Tasks
         {
             public const EventTask StartingCopy = (EventTask)0x1;
@@ -361,7 +384,7 @@ namespace NuGet.Services.Work.Jobs
             public const EventTask DeletingOldCopy = (EventTask)0x7;
             public const EventTask RecoveringExistingCopy = (EventTask)0x8;
             public const EventTask DatabaseCopyProcess = (EventTask)0x9;
-            // Remember, this is hex, so the next task is 0xA!
+            public const EventTask AbortingCopy = (EventTask)0xA;
         }
     }
 }

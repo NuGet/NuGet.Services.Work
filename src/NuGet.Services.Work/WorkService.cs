@@ -143,10 +143,6 @@ namespace NuGet.Services.Work
         {
             base.RegisterComponents(builder);
 
-            builder.RegisterType<AzureHub>()
-                .AsSelf()
-                .SingleInstance();
-
             var jobdefs = GetAllAvailableJobs();
             builder.RegisterInstance(jobdefs).As<IEnumerable<JobDescription>>();
 
