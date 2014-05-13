@@ -35,9 +35,10 @@ namespace NuGet.Services.Work.Jobs
         protected AzureHub Azure { get; set; }
         protected ConfigurationHub Config { get; set; }
 
-        public CopyDatabaseJob(AzureHub azure)
+        public CopyDatabaseJob(AzureHub azure, ConfigurationHub config)
         {
             Azure = azure;
+            Config = config;
             AddEventSource(AzureHubEventSource.Log);
         }
 
