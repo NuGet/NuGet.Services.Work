@@ -41,6 +41,9 @@ namespace NuGet.Services.Work.Jobs
 
         protected internal override async Task<JobContinuation> Execute()
         {
+            // Give an extra 10 minutes to execute
+            await Extend(TimeSpan.FromMinutes(10));
+
             Start = DateTime.UtcNow;
 
             // Defaults:
@@ -84,6 +87,9 @@ namespace NuGet.Services.Work.Jobs
 
         protected internal override async Task<JobContinuation> Resume()
         {
+            // Give us another 10 minutes to execute
+            await Extend(TimeSpan.FromMinutes(10));
+
             using (var sql = CloudContext.Clients.CreateSqlManagementClient(Azure.GetCredentials(throwIfMissing: true)))
             {
                 try
