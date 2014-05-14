@@ -89,45 +89,61 @@ namespace NuGet.Services.Work.Jobs
         {
             using (var sql = CloudContext.Clients.CreateSqlManagementClient(Azure.GetCredentials(throwIfMissing: true)))
             {
-                // 2. Check the status of the copy
-                Log.CheckingCopyStatus(CopyOperationId);
-                var ops = await sql.DatabaseOperations.ListByDatabaseAsync(TargetServerName, CopyName);
-                var op = ops.FirstOrDefault();
-                switch (op.StateId)
+                try
                 {
-                    case 2: // COMPLETED (http://msdn.microsoft.com/en-us/library/azure/dn720371.aspx)
-                        Log.CopyCompleted();
-                        await CompleteCopy(sql);
-                        Log.CompletedDatabaseCopyProcess(SourceServerName, SourceDatabaseName, TargetServerName, TargetDatabaseName);
-                        return Complete();
-                    case 3: // FAILED
-                        // Copy failed! Fail the whole job
-                        throw new JobFailureException(op.Error);
-                    default:
-                        // Copy is still in progress, check for timeout
-                        if (Timeout.HasValue && ((DateTime.UtcNow - Context.Invocation.QueuedAt.UtcDateTime) >= Timeout.Value))
-                        {
-                            // Abort the copy
-                            Log.AbortingCopy(SourceServerName, SourceDatabaseName);
-                            await sql.Databases.DeleteAsync(TargetServerName, CopyName);
-                            Log.AbortedCopy(SourceServerName, SourceDatabaseName);
-                            throw new JobFailureException("Copy operation exceeded timeout and was aborted.");
-                        }
-                        
-                        // Save state and wait for another five minutes
-                        Log.CopyInProgress(op.PercentComplete);
-                        return Suspend(TimeSpan.FromMinutes(5), new {
-                            SourceServerName,
-                            SourceDatabaseName,
-                            TargetServerName,
-                            TargetDatabaseName,
-                            CopyName,
-                            CopyOperationId,
-                            Timeout,
-                            Start
-                        });
+                    // 2. Check the status of the copy
+                    Log.CheckingCopyStatus(CopyOperationId);
+                    var ops = await sql.DatabaseOperations.ListByDatabaseAsync(TargetServerName, CopyName);
+                    var op = ops.FirstOrDefault();
+                    switch (op.StateId)
+                    {
+                        case 2: // COMPLETED (http://msdn.microsoft.com/en-us/library/azure/dn720371.aspx)
+                            Log.CopyCompleted();
+                            await CompleteCopy(sql);
+                            Log.CompletedDatabaseCopyProcess(SourceServerName, SourceDatabaseName, TargetServerName, TargetDatabaseName);
+                            return Complete();
+                        case 3: // FAILED
+                            // Copy failed! Fail the whole job
+                            throw new JobFailureException(op.Error);
+                        default:
+                            // Copy is still in progress, check for timeout
+                            if (Timeout.HasValue && ((DateTime.UtcNow - Context.Invocation.QueuedAt.UtcDateTime) >= Timeout.Value))
+                            {
+                                // Abort the copy
+                                await AbortCopy(sql);
+                                throw new JobFailureException("Copy operation exceeded timeout and was aborted.");
+                            }
+
+                            // Save state and wait for another five minutes
+                            Log.CopyInProgress(op.PercentComplete);
+                            return Suspend(TimeSpan.FromMinutes(5), new
+                            {
+                                SourceServerName,
+                                SourceDatabaseName,
+                                TargetServerName,
+                                TargetDatabaseName,
+                                CopyName,
+                                CopyOperationId,
+                                Timeout,
+                                Start
+                            });
+                    }
+                }
+                catch (Exception)
+                {
+                    // Abort the copy
+                    AbortCopy(sql).Wait();
+
+                    throw;
                 }
             }
+        }
+
+        private async Task AbortCopy(SqlManagementClient sql)
+        {
+            Log.AbortingCopy(SourceServerName, SourceDatabaseName);
+            await sql.Databases.DeleteAsync(TargetServerName, CopyName);
+            Log.AbortedCopy(SourceServerName, SourceDatabaseName);
         }
 
         private async Task CompleteCopy(SqlManagementClient sql)

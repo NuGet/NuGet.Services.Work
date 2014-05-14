@@ -111,7 +111,7 @@ namespace NuGet.Services.Work
                 waitPeriod,
                 (from p in parameters.GetType().GetTypeInfo().DeclaredProperties
                  select new { p.Name, Value = p.GetValue(parameters) })
-                 .ToDictionary(a => a.Name, a => a.Value.ToString()));
+                 .ToDictionary(a => a.Name, a => a.Value == null ? null : a.Value.ToString()));
         }
 
         protected JobContinuation Suspend(TimeSpan waitPeriod, Dictionary<string, string> parameters)
