@@ -173,7 +173,7 @@ namespace NuGet.Services.Work.Jobs
                     DateTimeOffset lastModified;
                     if (packages.TryGetValue(blobName, out lastModified))
                     {
-                        if (!pkgRef.LastEdited.HasValue || pkgRef.LastEdited.Value == null)
+                        if (pkgRef.LastEdited == null)
                         {
                             // Package Exists and Don't overwrite
                             // LastEdited is null meaning packages was not edited after getting published
