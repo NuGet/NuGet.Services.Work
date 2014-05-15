@@ -59,7 +59,7 @@ namespace NuGet.Services.Work.Jobs
                 (TargetDatabaseNamePrefix + "_" + DateTime.UtcNow.ToString("yyyyMMMdd_HHmm") + "Z").ToLowerInvariant();
 
             // Use our invocation ID to generate a unique name
-            CopyName = "copytemp_" + Guid.NewGuid().ToString("N");
+            CopyName = "copytemp_" + Context.Invocation.Id.ToString("N");
 
             Log.BeginningDatabaseCopyProcess(SourceServerName, SourceDatabaseName, TargetServerName, TargetDatabaseName, CopyName);
 

@@ -63,11 +63,14 @@ namespace NuGet.Services.Work.Jobs
             {
                 // Get online databases
                 Log.GettingDatabaseList(ServerName);
-                var backups = (await sql.Databases.ListAsync(ServerName))
+                var dbs = (await sql.Databases.ListAsync(ServerName)).ToList();
+                Log.GotDatabases(dbs.Count, ServerName);
+
+                // Determine which of these are backups
+                var backups = dbs
                     .Select(d => DatabaseBackup<Database>.Create(d))
                     .Where(b => b != null && String.Equals(NamePrefix, b.Prefix))
                     .ToList();
-                Log.GotDatabases(backups.Count, ServerName);
 
                 // Start collecting a list of backups we're going to keep
                 var keepers = new HashSet<DatabaseBackup<Database>>();
@@ -107,6 +110,21 @@ namespace NuGet.Services.Work.Jobs
                         await sql.Databases.DeleteAsync(ServerName, db.Db.Name);
                     }
                     Log.DeletedBackup(db.Db.Name);
+                }
+
+                // Clean out CopyTemp databases older than 3 hours
+                var copytemps = dbs
+                    .Where(db =>
+                        db.Name.StartsWith("copytemp", StringComparison.OrdinalIgnoreCase) &&
+                        db.CreationDate < DateTime.UtcNow.AddHours(-3));
+                foreach (var copytemp in copytemps)
+                {
+                    Log.DeletingBackup(copytemp.Name);
+                    if(!WhatIf)
+                    {
+                        await sql.Databases.DeleteAsync(ServerName, copytemp.Name);
+                    }
+                    Log.DeletedBackup(copytemp.Name);
                 }
             }
             return Complete();
