@@ -96,6 +96,7 @@ namespace NuGet.Services.Work.Jobs
                     INNER JOIN Packages ON PackageStatistics.PackageKey = Packages.[Key] 
                     INNER JOIN PackageRegistrations ON PackageRegistrations.[Key] = Packages.PackageRegistrationKey 
                     WHERE PackageStatistics.[Key] > @originalKey 
+                    ORDER BY PackageStatistics.[Key]
                     ", new
                     {
                         originalKey,
