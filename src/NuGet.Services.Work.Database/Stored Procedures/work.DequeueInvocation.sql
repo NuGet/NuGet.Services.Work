@@ -8,7 +8,7 @@ AS
 	WITH cte
 	AS (
 		SELECT TOP (1) *
-		FROM [work].ActiveInvocations WITH (rowlock, readpast)
+		FROM [work].ActiveInvocations
 		WHERE [NextVisibleAt] <= SYSUTCDATETIME() 
 			AND Complete = 0
 		ORDER BY [NextVisibleAt]
