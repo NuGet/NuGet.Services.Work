@@ -5,10 +5,12 @@
 )
 AS
 	-- Find an available row to dequeue and insert a new one indicating it has been dequeued
+    -- * We use a tablockx below because we want the whole darn table locked while we do this to prevent double-dequeue
+    --   There are probably finer-grain locks we could take but this is the easiest way
 	WITH cte
 	AS (
 		SELECT TOP (1) *
-		FROM [work].ActiveInvocations
+		FROM [work].ActiveInvocations WITH (tablockx) -- MEGA LOCK!*
 		WHERE [NextVisibleAt] <= SYSUTCDATETIME() 
 			AND Complete = 0
 		ORDER BY [NextVisibleAt]
