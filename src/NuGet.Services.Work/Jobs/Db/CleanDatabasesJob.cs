@@ -102,14 +102,14 @@ namespace NuGet.Services.Work.Jobs
                 }
 
                 // Delete the others!
-                foreach (var db in backups.Except(keepers))
+                foreach (var db in backups.Select(b => b.Db.Name).Except(keepers.Select(b => b.Db.Name), StringComparer.OrdinalIgnoreCase))
                 {
-                    Log.DeletingBackup(db.Db.Name);
+                    Log.DeletingBackup(db);
                     if (!WhatIf)
                     {
-                        await sql.Databases.DeleteAsync(ServerName, db.Db.Name);
+                        await sql.Databases.DeleteAsync(ServerName, db);
                     }
-                    Log.DeletedBackup(db.Db.Name);
+                    Log.DeletedBackup(db);
                 }
 
                 // Clean out CopyTemp databases older than 3 hours
