@@ -69,7 +69,7 @@ namespace NuGet.Services.Work.Jobs
                 // Determine which of these are backups
                 var backups = dbs
                     .Select(d => DatabaseBackup<Database>.Create(d))
-                    .Where(b => b != null && String.Equals(NamePrefix, b.Prefix))
+                    .Where(b => b != null && String.Equals(NamePrefix, b.Prefix, StringComparison.OrdinalIgnoreCase))
                     .ToList();
 
                 // Start collecting a list of backups we're going to keep
