@@ -18,7 +18,7 @@ namespace NuGet.Services.Work.Jobs
     [Description("Imports a bacpac file into database")]
     public class ImportDatabaseJob : DatabaseJobHandlerBase<ImportDatabaseEventSource>
     {
-        public static readonly string BackupPrefix = "Backup";
+        public static readonly string DefaultBackupPrefix = "backup";
         private const string RenameDatabase = @"ALTER DATABASE [{0}] MODIFY NAME = [{1}]";
         private const string DropDatabase = @"DROP DATABASE [{0}]";
         private const string DefaultGalleryDBName = "NuGetGallery";
@@ -36,6 +36,8 @@ namespace NuGet.Services.Work.Jobs
         public string GalleryDBName { get; set; }
 
         public int RenameAttempts { get; set; }
+
+        public string BackupPrefix { get; set; }
 
         public ImportDatabaseJob(ConfigurationHub configHub) : base(configHub) { }
 
@@ -64,6 +66,11 @@ namespace NuGet.Services.Work.Jobs
                 GalleryDBName = DefaultGalleryDBName;
             }
             Log.GalleryDBName(GalleryDBName);
+
+            if (String.IsNullOrEmpty(BackupPrefix))
+            {
+                BackupPrefix = DefaultBackupPrefix;
+            }
 
             if (SourceStorageAccountName == null && SourceStorageAccountKey == null)
             {
