@@ -290,6 +290,7 @@
     <Compile Include="Jobs\UpdateLicenseReportsJob.cs" />
     <Compile Include="Jobs\Search\UpdateSearchIndexJob.cs" />
     <Compile Include="LocalWorkService.cs" />
+    <Compile Include="Metadata\EmitMetadataBlobs.cs" />
     <Compile Include="Monitoring\EventSourceWriter.cs" />
     <Compile Include="ServiceReferences\DACWebServiceReference.cs" />
     <Compile Include="Worker.cs" />
