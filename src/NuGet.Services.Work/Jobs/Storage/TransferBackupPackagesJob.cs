@@ -69,15 +69,11 @@ namespace NuGet.Services.Work.Jobs
             if (packageBlobsToCopy.Count > 0)
             {
                 var policy = new SharedAccessBlobPolicy();
-                policy.SharedAccessStartTime = DateTimeOffset.Now;
-                policy.SharedAccessExpiryTime = DateTimeOffset.Now + TimeSpan.FromHours(2) + TimeSpan.FromMinutes(2 * packageBlobsToCopy.Count);
                 policy.Permissions = SharedAccessBlobPermissions.Read;
-                var sourceContainerSharedAccessUri = SourceContainer.GetSharedAccessSignature(policy);
-                Log.SharedAccessSignatureURI(sourceContainerSharedAccessUri);
 
                 foreach (var packageBlobName in packageBlobsToCopy)
                 {
-                    await CopyPackageToDestination(sourceContainerSharedAccessUri, packageBlobName);
+                    await CopyPackageToDestination(policy, packageBlobName);
 
                     if ((Invocation.NextVisibleAt - DateTimeOffset.UtcNow) < TimeSpan.FromMinutes(1))
                     {
@@ -96,7 +92,7 @@ namespace NuGet.Services.Work.Jobs
             Log.StartedTransfer();
         }
 
-        private async Task CopyPackageToDestination(string sourceContainerSharedAccessUri, string packageBlobName)
+        private async Task CopyPackageToDestination(SharedAccessBlobPolicy policy, string packageBlobName)
         {
             // Identify the source and destination blobs
             var sourceBlob = SourceContainer.GetBlockBlobReference(packageBlobName);
@@ -111,7 +107,16 @@ namespace NuGet.Services.Work.Jobs
             }
             else
             {
+                // Need to use Shared Access Signature since blobs to be copied are in a private container
+                // Create a Shared Access Signature (SAS) Uri, for every blob to be copied
+                // Set start time as Now and expiry time as Now + 12 hours
+                policy.SharedAccessStartTime = DateTimeOffset.Now;
+                policy.SharedAccessExpiryTime = DateTimeOffset.Now + TimeSpan.FromHours(12);
+                var sourceContainerSharedAccessUri = SourceContainer.GetSharedAccessSignature(policy);
+                Log.SharedAccessSignatureURI(sourceContainerSharedAccessUri);
+
                 var sourceUri = new Uri(sourceBlob.Uri, sourceContainerSharedAccessUri);
+
                 // Start the copy or overwrite
                 Log.StartingCopy(sourceUri.AbsoluteUri, destBlob.Uri.AbsoluteUri);
                 if (!WhatIf)
