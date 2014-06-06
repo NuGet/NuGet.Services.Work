@@ -546,6 +546,6 @@ namespace NuGet.Services.Work.Jobs
             eventId: 37,
             Level = EventLevel.Informational,
             Message = "Exception Caught. Message: {0}. Moving on...")]
-        public void Exception(string message) { WriteEvent(37); }
+        public void Exception(string message) { WriteEvent(37, message); }
     }
 }
