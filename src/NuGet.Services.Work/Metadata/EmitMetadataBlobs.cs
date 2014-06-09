@@ -10,17 +10,23 @@ using System.Text;
 using System.Threading.Tasks;
 
 using Newtonsoft.Json.Linq;
+using NuGet.Services.Storage;
 
 namespace NuGet.Services.Work.Jobs
 {
     public class EmitResolverBlobsJob : JobHandler<EmitResolverBlobsEventSource>
     {
-        public EmitResolverBlobsJob(ConfigurationHub config) { }
+        public EmitResolverBlobsJob(ConfigurationHub config, StorageHub storage)
+        {
+            Storage = storage;
+            Config = config;
+        }
+
+        ConfigurationHub Config { get; set; }
+        StorageHub Storage { get; set; }
 
         public string CatalogUri { get; set; }
-        public string AccountKey { get; set; }
-        public string AccountName { get; set; }
-        public string ConnectionString { get; set; }
+        //public string ConnectionString { get; set; }
         public string Container { get; set; }
         public string BaseAddress { get; set; }
 
@@ -28,9 +34,7 @@ namespace NuGet.Services.Work.Jobs
         {
             NuGet.Services.Metadata.Catalog.Persistence.Storage storage = new AzureStorage
             {
-                AccountKey = AccountKey,
-                AccountName = AccountName,
-                ConnectionString = ConnectionString,
+                ConnectionString = Storage.Primary.ConnectionString,
                 Container = Container,
                 BaseAddress = BaseAddress
             };
@@ -47,7 +51,7 @@ namespace NuGet.Services.Work.Jobs
             else
             {
                 JToken cursorDoc = JsonLD.Util.JSONUtils.FromInputStream(content.GetContentStream());
-                since = DateTime.Parse((string)cursorDoc["cursor"]);
+                since = DateTime.Parse((string)cursorDoc["http://nuget.org/collector/resolver#cursor"]);
             }
 
             Uri requestUri = new Uri(CatalogUri);
@@ -55,9 +59,9 @@ namespace NuGet.Services.Work.Jobs
             ResolverCollector collector = new ResolverCollector(storage, 200) { Logger = EmitResolverBlobsEventSource.Log };
             since = (DateTime)await collector.Run(requestUri, since);
 
-            await storage.Save(cursorUri, new StringStorageContent(new JObject { { "cursor", since.ToString() } }.ToString()));
+            await storage.Save(cursorUri, new StringStorageContent(new JObject { { "http://nuget.org/collector/resolver#cursor", since.ToString() }, { "http://nuget.org/collector/resolver#source", CatalogUri } }.ToString()));
 
-            InvocationState state = await this.Enqueue(this.Invocation.Job, this.Invocation.Payload, TimeSpan.FromSeconds(3));
+            await this.Enqueue(this.Invocation.Job, this.Invocation.Payload, TimeSpan.FromSeconds(3));
         }
     }
 
