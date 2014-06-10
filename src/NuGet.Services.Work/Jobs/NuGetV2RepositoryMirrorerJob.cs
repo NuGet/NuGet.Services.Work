@@ -191,16 +191,16 @@ MirrorBlobName, lastPublished.ToString(DateTimeFormatSpecifier), lastPublished.K
             // Download the package locally into a temp folder. This prevents storing the package in memory
             // which becomes an issue with large packages. Push command uses OptimizedZipPackage and we will too
             Console.WriteLine("Adding {0} locally. Published Date in Source : {1}", package.ToString(), package.Published.Value.DateTime.ToString());
-            // tempPackageManager.InstallPackage(package.Id, package.Version, ignoreDependencies: true, allowPrereleaseVersions: true);
+            tempPackageManager.InstallPackage(package.Id, package.Version, ignoreDependencies: true, allowPrereleaseVersions: true);
             Console.WriteLine("Added {0} locally", package.ToString());
 
-            //	// Push the local package onto destination Repository
-            //	var localInstallPath = tempLocalRepo.PathResolver.GetInstallPath(package);
-            //	var localPackagePath = Path.Combine(localInstallPath, tempLocalRepo.PathResolver.GetPackageFileName(package));
-            //	var localPackage = new OptimizedZipPackage(localPackagePath);
+            // Push the local package onto destination Repository
+            var localInstallPath = tempLocalRepo.PathResolver.GetInstallPath(package);
+            var localPackagePath = Path.Combine(localInstallPath, tempLocalRepo.PathResolver.GetPackageFileName(package));
+            var localPackage = new OptimizedZipPackage(localPackagePath);
 
-            //Console.WriteLine("Pushing the local package {0} to destination Repository", localPackage.ToString());
-            //destinationServer.PushPackage(apiKey, localPackage, new FileInfo(localPackagePath).Length, timeOut, disableBuffering: false);
+            Console.WriteLine("Pushing the local package {0} to destination Repository", localPackage.ToString());
+            destinationServer.PushPackage(apiKey, localPackage, new FileInfo(localPackagePath).Length, timeOut);
         }
 
         private void ThrowIfStatusCodeIsNotConflict(Exception ex)
@@ -244,7 +244,7 @@ MirrorBlobName, lastPublished.ToString(DateTimeFormatSpecifier), lastPublished.K
 
             // Packages returned are not sorted by Published Date but by name
             // Sort them by Published Date in ascending order so that the packages are pushed to the mirror in that order
-            //newPackages.Sort(delegate(IPackage x, IPackage y) { return Nullable.Compare<DateTimeOffset>(x.Published, y.Published); });
+            newPackages.Sort(delegate(DataServicePackage x, DataServicePackage y) { return Nullable.Compare<DateTimeOffset>(x.Published, y.Published); });
             Console.WriteLine("Sorted new packages to be mirrored by Published Date in Source");
 
             IPackage lastMirroredPackage = null;
@@ -275,7 +275,7 @@ MirrorBlobName, lastPublished.ToString(DateTimeFormatSpecifier), lastPublished.K
             catch (Exception ex)
             {
                 retries++;
-                Console.WriteLine("Need to stop mirroring since all the new packages published may not be available for mirroring. Retries performed: {0}. Exception: {1}",
+                Console.WriteLine("Need to retry mirroring since all the new packages published may not be available for mirroring or the remote server is not reachable. Retries performed: {0}. Exception: {1}",
                                     retries, ex.Message);
                 if (lastMirroredPackage != null)
                 {
