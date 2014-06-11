@@ -34,7 +34,7 @@ namespace NuGet.Services.Work.Jobs
         {
             NuGet.Services.Metadata.Catalog.Persistence.Storage storage = new AzureStorage
             {
-                ConnectionString = Storage.Primary.ConnectionString,
+                ConnectionString = Storage.Legacy.ConnectionString,
                 Container = Container,
                 BaseAddress = BaseAddress
             };
@@ -51,7 +51,7 @@ namespace NuGet.Services.Work.Jobs
             else
             {
                 JToken cursorDoc = JsonLD.Util.JSONUtils.FromInputStream(content.GetContentStream());
-                since = DateTime.Parse((string)cursorDoc["http://nuget.org/collector/resolver#cursor"]);
+                since = DateTime.Parse((string)cursorDoc["http://nuget.org/collector/resolver#cursor"]["@value"]);
             }
 
             Uri requestUri = new Uri(CatalogUri);
@@ -59,7 +59,7 @@ namespace NuGet.Services.Work.Jobs
             ResolverCollector collector = new ResolverCollector(storage, 200) { Logger = EmitResolverBlobsEventSource.Log };
             since = (DateTime)await collector.Run(requestUri, since);
 
-            await storage.Save(cursorUri, new StringStorageContent(new JObject { { "http://nuget.org/collector/resolver#cursor", since.ToString() }, { "http://nuget.org/collector/resolver#source", CatalogUri } }.ToString()));
+            await storage.Save(cursorUri, new StringStorageContent(new JObject { { "http://nuget.org/collector/resolver#cursor", new JObject { { "@value", since.ToString() }, { "@type", "http://www.w3.org/2001/XMLSchema#dateTime" } } }, { "http://nuget.org/collector/resolver#source", CatalogUri } }.ToString()));
 
             await this.Enqueue(this.Invocation.Job, this.Invocation.Payload, TimeSpan.FromSeconds(3));
         }
