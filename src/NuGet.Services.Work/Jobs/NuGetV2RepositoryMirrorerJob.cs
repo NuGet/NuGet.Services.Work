@@ -87,9 +87,7 @@ namespace NuGet.Services.Work.Jobs
 
             var oldLastPublished = jObject.Value<DateTime>(LastPublishedKey);
             var lastPublished = oldLastPublished;
-            Console.WriteLine(@"lastPublished as retrieved from the lastPublished blob {0} is {1}, DateTimeKind: {2}.
-So, packages will be mirrored from {3} to {4} whose published Date is greater than {1}",
-MirrorBlobName, lastPublished.ToString(DateTimeFormatSpecifier), lastPublished.Kind.ToString(), sourceUri.AbsoluteUri, DestinationUri);
+            Log.PreparingToMirror(MirrorBlobName, lastPublished.ToString(DateTimeFormatSpecifier), lastPublished.Kind.ToString(), sourceUri.AbsoluteUri, DestinationUri);
 
             int retries = 0;
             int count = 0;
@@ -131,7 +129,7 @@ MirrorBlobName, lastPublished.ToString(DateTimeFormatSpecifier), lastPublished.K
                         // Note that the Published DateTime is always stored in UTC, but the DateTimeKind of the value obtained is Unspecified
                         // So, store it as UTC
                         lastPublished = new DateTime(lastMirroredPackage.Published.Value.DateTime.Ticks, DateTimeKind.Utc);
-                        Console.WriteLine("New lastPublished : {0}. End of Iteration", lastPublished.ToString(DateTimeFormatSpecifier));
+                        Log.EndOfIteration(lastPublished.ToString(DateTimeFormatSpecifier));
                     }
                     else if (retries == 0 || retries > 5)
                     {
@@ -150,7 +148,7 @@ MirrorBlobName, lastPublished.ToString(DateTimeFormatSpecifier), lastPublished.K
             {
                 jObject[LastPublishedKey] = lastPublished.ToString(DateTimeFormatSpecifier);
                 await SetJObject(MirrorBlobContainer, MirrorBlobName, jObject);
-                Console.WriteLine("New LastPublished to be stored in {0} is {1}, DateTimeKind: {2}", MirrorBlobName, lastPublished.ToString(DateTimeFormatSpecifier), lastPublished.Kind.ToString());
+                Log.NewLastPublishedAtEndOfInvocation(MirrorBlobName, lastPublished.ToString(DateTimeFormatSpecifier), lastPublished.Kind.ToString());
             }
 
             if (caughtException != null)
@@ -161,11 +159,11 @@ MirrorBlobName, lastPublished.ToString(DateTimeFormatSpecifier), lastPublished.K
 
         private List<DataServicePackage> GetNewPackagesToMirror(DataServices.DataServiceContext serviceContext, DateTime lastPublished)
         {
-            Console.WriteLine("Querying for packages published to {0} since {1}", serviceContext.BaseUri.AbsoluteUri, lastPublished.ToString(DateTimeFormatSpecifier));
+            Log.QueryNewPackages(serviceContext.BaseUri.AbsoluteUri, lastPublished.ToString(DateTimeFormatSpecifier));
             var packagesQuery = serviceContext.CreateQuery<DataServicePackage>("Packages");
             var queryOptionValue = String.Format("Published gt DateTime'{0}'", lastPublished.ToString(DateTimeFormatSpecifier));
             packagesQuery = packagesQuery.AddQueryOption("$filter", queryOptionValue);
-            Console.WriteLine("Query Filter : {0}", queryOptionValue);
+            Log.QueryFilter(queryOptionValue);
             return packagesQuery.ToList();
         }
 
@@ -190,16 +188,16 @@ MirrorBlobName, lastPublished.ToString(DateTimeFormatSpecifier), lastPublished.K
         {
             // Download the package locally into a temp folder. This prevents storing the package in memory
             // which becomes an issue with large packages. Push command uses OptimizedZipPackage and we will too
-            Console.WriteLine("Adding {0} locally. Published Date in Source : {1}", package.ToString(), package.Published.Value.DateTime.ToString());
+            Log.AddingPackageLocally(package.ToString(), package.Published.Value.DateTime.ToString());
             tempPackageManager.InstallPackage(package.Id, package.Version, ignoreDependencies: true, allowPrereleaseVersions: true);
-            Console.WriteLine("Added {0} locally", package.ToString());
+            Log.AddedPackageLocally(package.ToString());
 
             // Push the local package onto destination Repository
             var localInstallPath = tempLocalRepo.PathResolver.GetInstallPath(package);
             var localPackagePath = Path.Combine(localInstallPath, tempLocalRepo.PathResolver.GetPackageFileName(package));
             var localPackage = new OptimizedZipPackage(localPackagePath);
 
-            Console.WriteLine("Pushing the local package {0} to destination Repository", localPackage.ToString());
+            Log.PushingPackage(localPackage.ToString());
             destinationServer.PushPackage(apiKey, localPackage, new FileInfo(localPackagePath).Length, timeOut);
         }
 
@@ -228,7 +226,7 @@ MirrorBlobName, lastPublished.ToString(DateTimeFormatSpecifier), lastPublished.K
         string apiKey, int timeOut, ref int retries, ref int count)
         {
             var newPackages = GetNewPackagesToMirror(serviceContext, lastPublished);
-            Console.WriteLine("Number of packages to copy in this iteration : {0}", newPackages.Count);
+            Log.PackagesCopiedCount(newPackages.Count);
 
             if (newPackages.Count == 0)
             {
@@ -237,7 +235,7 @@ MirrorBlobName, lastPublished.ToString(DateTimeFormatSpecifier), lastPublished.K
 
             // Push packages
             var tempFolderPath = GetTempFolderPath(serviceContext.BaseUri.DnsSafeHost);
-            Console.WriteLine("Packages will be temporarily stored in : {0}", tempFolderPath);
+            Log.TempFolderPath(tempFolderPath);
 
             var tempLocalRepo = new LocalPackageRepository(tempFolderPath);
             var tempPackageManager = new PackageManager(new DataServicePackageRepository(serviceContext.BaseUri), tempFolderPath);
@@ -245,7 +243,7 @@ MirrorBlobName, lastPublished.ToString(DateTimeFormatSpecifier), lastPublished.K
             // Packages returned are not sorted by Published Date but by name
             // Sort them by Published Date in ascending order so that the packages are pushed to the mirror in that order
             newPackages.Sort(delegate(DataServicePackage x, DataServicePackage y) { return Nullable.Compare<DateTimeOffset>(x.Published, y.Published); });
-            Console.WriteLine("Sorted new packages to be mirrored by Published Date in Source");
+            Log.NewPackagesSortedByPublishedDate();
 
             IPackage lastMirroredPackage = null;
             try
@@ -255,7 +253,7 @@ MirrorBlobName, lastPublished.ToString(DateTimeFormatSpecifier), lastPublished.K
                     try
                     {
                         MirrorPackage(package, destinationServer, tempPackageManager, tempLocalRepo, apiKey, timeOut);
-                        Console.WriteLine("Pushed the package to destination repository. Total number of packages mirrored so far in this invocation : {0}", ++count);
+                        Log.PushedToDestination(++count);
                         lastMirroredPackage = package;
                         retries = 0;
                     }
@@ -265,7 +263,7 @@ MirrorBlobName, lastPublished.ToString(DateTimeFormatSpecifier), lastPublished.K
                         ThrowIfStatusCodeIsNotConflict(ex);
 
                         // The package has already been mirrored. Hence, the status Code 'Conflict'
-                        Console.WriteLine("Skipping mirroring of package {0}, since it already exists in destination", package.ToString());
+                        Log.PackageAlreadyExists(package.ToString());
 
                         // Skip to next package. But, set lastMirroredPackage before doing so
                         lastMirroredPackage = package;
@@ -275,17 +273,16 @@ MirrorBlobName, lastPublished.ToString(DateTimeFormatSpecifier), lastPublished.K
             catch (Exception ex)
             {
                 retries++;
-                Console.WriteLine("Need to retry mirroring since all the new packages published may not be available for mirroring or the remote server is not reachable. Retries performed: {0}. Exception: {1}",
-                                    retries, ex.Message);
+                Log.ServerUnreachable(retries, ex.Message);
                 if (lastMirroredPackage != null)
                 {
-                    Console.WriteLine("Could not mirror package {0}", lastMirroredPackage.ToString());
+                    Log.MirrorFailed(lastMirroredPackage.ToString());
                 }
             }
 
             // Delete the packages stored locally
             Directory.Delete(tempFolderPath, recursive: true);
-            Console.WriteLine("Deleted temp folder for packages: {0}", tempFolderPath);
+            Log.DeletedTempFolder(tempFolderPath);
 
             return lastMirroredPackage;
         }
@@ -311,5 +308,102 @@ MirrorBlobName, lastPublished.ToString(DateTimeFormatSpecifier), lastPublished.K
         public static readonly NuGetV2RepositoryMirrorerEventSource Log = new NuGetV2RepositoryMirrorerEventSource();
 
         private NuGetV2RepositoryMirrorerEventSource() { }
+
+        [Event(
+            eventId: 1,
+            Level = EventLevel.Informational,
+            Message = @"lastPublished as retrieved from the lastPublished blob {0} is {1}, DateTimeKind: {2}.
+So, packages will be mirrored from {3} to {4} whose published Date is greater than {1}")]
+        public void PreparingToMirror(string blobName, string lastPublished, string dateTimeKind, string source, string destination) { WriteEvent(1, blobName, lastPublished, dateTimeKind, source, destination); }
+
+        [Event(
+            eventId: 2,
+            Level = EventLevel.Informational,
+            Message = "New lastPublished : {0}. End of Iteration")]
+        public void EndOfIteration(string lastPublished) { WriteEvent(2, lastPublished); }
+
+        [Event(
+            eventId: 3,
+            Level = EventLevel.Informational,
+            Message = "New LastPublished to be stored in {0} is {1}, DateTimeKind: {2}")]
+        public void NewLastPublishedAtEndOfInvocation(string blobName, string lastPublished, string dateTimeKind) { WriteEvent(3, blobName, lastPublished, dateTimeKind); }
+
+        [Event(
+            eventId: 4,
+            Level = EventLevel.Informational,
+            Message = "Querying for packages published to {0} since {1}")]
+        public void QueryNewPackages(string source, string lastPublished) { WriteEvent(4, source, lastPublished); }
+
+        [Event(
+            eventId: 5,
+            Level = EventLevel.Informational,
+            Message = "Query Filter : {0}")]
+        public void QueryFilter(string queryFilter) { WriteEvent(5, queryFilter); }
+
+        [Event(
+            eventId: 6,
+            Level = EventLevel.Informational,
+            Message = "Adding {0} locally. Published Date in Source : {1}")]
+        public void AddingPackageLocally(string package, string publishedDateInSource) { WriteEvent(6, package, publishedDateInSource); }
+
+        [Event(
+            eventId: 7,
+            Level = EventLevel.Informational,
+            Message = "Added {0} locally")]
+        public void AddedPackageLocally(string package) { WriteEvent(7, package); }
+
+        [Event(
+            eventId: 8,
+            Level = EventLevel.Informational,
+            Message = "Pushing the local package {0} to destination Repository")]
+        public void PushingPackage(string package) { WriteEvent(8, package); }
+
+        [Event(
+            eventId: 9,
+            Level = EventLevel.Informational,
+            Message = "Number of packages to copy in this iteration : {0}")]
+        public void PackagesCopiedCount(int packagesCopiedCount) { WriteEvent(9, packagesCopiedCount); }
+
+        [Event(
+            eventId: 10,
+            Level = EventLevel.Informational,
+            Message = "Packages will be temporarily stored in : {0}")]
+        public void TempFolderPath(string tempFolderPath) { WriteEvent(10, tempFolderPath); }
+
+        [Event(
+            eventId: 11,
+            Level = EventLevel.Informational,
+            Message = "Sorted new packages to be mirrored by Published Date in Source")]
+        public void NewPackagesSortedByPublishedDate() { WriteEvent(11); }
+
+        [Event(
+            eventId: 12,
+            Level = EventLevel.Informational,
+            Message = "Pushed the package to destination repository. Total number of packages mirrored so far in this invocation : {0}")]
+        public void PushedToDestination(int countSoFar) { WriteEvent(12, countSoFar); }
+
+        [Event(
+            eventId: 13,
+            Level = EventLevel.Informational,
+            Message = "Skipping mirroring of package {0}, since it already exists in destination")]
+        public void PackageAlreadyExists(string package) { WriteEvent(13, package); }
+
+        [Event(
+            eventId: 14,
+            Level = EventLevel.Informational,
+            Message = "Need to retry mirroring since all the new packages published may not be available for mirroring or the remote server is not reachable. Retries performed: {0}. Exception: {1}")]
+        public void ServerUnreachable(int retries, string exception) { WriteEvent(14, retries, exception); }
+
+        [Event(
+            eventId: 15,
+            Level = EventLevel.Informational,
+            Message = "Could not mirror package {0}")]
+        public void MirrorFailed(string package) { WriteEvent(15, package); }
+
+        [Event(
+            eventId: 16,
+            Level = EventLevel.Informational,
+            Message = "Deleted temp folder for packages: {0}")]
+        public void DeletedTempFolder(string tempFolder) { WriteEvent(16, tempFolder); }
     }
 }
