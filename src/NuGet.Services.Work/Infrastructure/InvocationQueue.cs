@@ -375,7 +375,7 @@ namespace NuGet.Services.Work
             return ConnectAndQuery(@"
                 WITH cte AS (
                     SELECT *, ROW_NUMBER() OVER (PARTITION BY Job ORDER BY [UpdatedAt] DESC) AS rn
-	                FROM [work].Invocations
+                    FROM [work].Invocations
                 )
                 SELECT *
                 FROM cte

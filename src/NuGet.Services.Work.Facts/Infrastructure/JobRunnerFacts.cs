@@ -5,7 +5,6 @@ using System.Threading.Tasks;
 using Moq;
 using NuGet.Services.Work.Monitoring;
 using Xunit;
-using Xunit.Extensions;
 using NuGet.Services.Work.Models;
 
 namespace NuGet.Services.Work.Infrastructure
