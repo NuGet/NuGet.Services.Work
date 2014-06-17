@@ -10,7 +10,6 @@ using Microsoft.Practices.EnterpriseLibrary.SemanticLogging;
 using NuGet.Services.Configuration;
 using NuGet.Services.Hosting;
 using NuGet.Services.ServiceModel;
-using NuGet.Services.Storage;
 using NuGet.Services.Work.Models;
 using NuGet.Services.Work.Monitoring;
 
@@ -67,7 +66,6 @@ namespace NuGet.Services.Work
                     Container),
                 InvocationQueue.Null,
                 Container.Resolve<ConfigurationHub>(),
-                Container.Resolve<StorageHub>(),
                 Clock.RealClock);
 
             var invocation =

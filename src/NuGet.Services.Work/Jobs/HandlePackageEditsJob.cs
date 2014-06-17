@@ -16,7 +16,6 @@ using Dapper;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
 using NuGet.Services.Configuration;
-using NuGet.Services.Storage;
 using NuGet.Services.Work.Jobs.Models;
 
 namespace NuGet.Services.Work.Jobs
@@ -60,13 +59,11 @@ namespace NuGet.Services.Work.Jobs
         protected CloudBlobContainer SourceContainer { get; set; }
         protected CloudBlobContainer BackupsContainer { get; set; }
 
-        protected StorageHub Storage { get; set; }
         protected ConfigurationHub Config { get; set; }
         protected long MaxManifestSize { get; set; }
 
-        public HandlePackageEditsJob(StorageHub storage, ConfigurationHub config)
+        public HandlePackageEditsJob(ConfigurationHub config)
         {
-            Storage = storage;
             Config = config;
         }
 
@@ -75,8 +72,8 @@ namespace NuGet.Services.Work.Jobs
             // Load defaults
             MaxManifestSize = MaxAllowedManifestBytes ?? DefaultMaxAllowedManifestBytes;
             PackageDatabase = PackageDatabase ?? Config.Sql.GetConnectionString(KnownSqlConnection.Legacy);
-            Source = Source ?? Storage.Legacy.Account;
-            Backups = Backups ?? Storage.Backup.Account;
+            Source = Source ?? Config.Storage.Legacy;
+            Backups = Backups ?? Config.Storage.Backup;
             SourceContainer = Source.CreateCloudBlobClient().GetContainerReference(
                 String.IsNullOrEmpty(SourceContainerName) ? BlobContainerNames.LegacyPackages : SourceContainerName);
             BackupsContainer = Backups.CreateCloudBlobClient().GetContainerReference(

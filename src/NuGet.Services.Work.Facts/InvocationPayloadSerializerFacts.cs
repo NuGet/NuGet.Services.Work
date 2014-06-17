@@ -1,10 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Xunit;
-using Xunit.Extensions;
 
 namespace NuGet.Services.Work
 {
@@ -26,14 +22,14 @@ namespace NuGet.Services.Work
         }
 
         [Theory]
-        [PropertyData("SimpleSerializationData")]
+        [MemberData("SimpleSerializationData")]
         public void SimpleSerialization(Dictionary<string, string> payload, string expectedJson)
         {
             Assert.Equal(expectedJson, InvocationPayloadSerializer.Serialize(payload));
         }
 
         [Theory]
-        [PropertyData("SimpleSerializationData")]
+        [MemberData("SimpleSerializationData")]
         public void SimpleDeserialization(Dictionary<string, string> expectedPayload, string json)
         {
             var deserialized = InvocationPayloadSerializer.Deserialize(json);

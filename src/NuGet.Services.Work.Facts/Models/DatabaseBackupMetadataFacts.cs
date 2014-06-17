@@ -1,11 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using NuGet.Services.Work.Jobs.Models;
+﻿using NuGet.Services.Work.Jobs.Models;
 using Xunit;
-using Xunit.Extensions;
 
 namespace NuGet.Services.Work.Models
 {

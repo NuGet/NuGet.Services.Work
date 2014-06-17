@@ -35,7 +35,7 @@ namespace NuGet.Services.Work.JobHost
 
         private static void WriteUsage()
         {
-            Console.WriteLine(ArgUsage.GetUsage<Arguments>());
+            ArgUsage.GenerateUsageFromTemplate<Arguments>().Write();
 
             Console.WriteLine();
             Console.WriteLine("Available jobs: ");

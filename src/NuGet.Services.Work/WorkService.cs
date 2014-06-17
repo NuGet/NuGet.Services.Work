@@ -1,44 +1,24 @@
 ﻿using System;
 using System.Reactive.Linq;
 using System.Collections.Generic;
-using System.Diagnostics.Tracing;
-using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
-using Microsoft.Practices.EnterpriseLibrary.SemanticLogging;
-using Microsoft.Practices.EnterpriseLibrary.SemanticLogging.Formatters;
-using Microsoft.Practices.EnterpriseLibrary.SemanticLogging.Sinks;
-using Microsoft.WindowsAzure.Diagnostics;
-using Microsoft.WindowsAzure.ServiceRuntime;
-using Microsoft.WindowsAzure.Storage;
-using Microsoft.WindowsAzure.Storage.Table;
-using System.Reactive.Subjects;
-using System.Reactive.Disposables;
-using Microsoft.WindowsAzure.Storage.Blob;
 using NuGet.Services.Work.Monitoring;
-using System.Net;
-using NuGet.Services.Storage;
 using NuGet.Services.Work.Configuration;
-using Autofac.Core;
 using Autofac;
 using NuGet.Services.ServiceModel;
-using NuGet.Services.Work.Api.Models;
 using NuGet.Services.Configuration;
 using NuGet.Services.Work.Models;
-using System.Threading;
 using System.Diagnostics;
-using Autofac.Features.ResolveAnything;
 using NuGet.Services.Http;
 using Microsoft.Owin;
 using System.Web.Http.Routing;
-using NuGet.Services.Work.Azure;
 
 namespace NuGet.Services.Work
 {
     public class WorkService : NuGetApiService
     {
-        internal const string InvocationLogsContainerBaseName = "ng-work-invocations";
+        internal const string InvocationLogsContainerName = "ng-work-invocations";
         public static readonly int DefaultWorkersPerCore = 2;
         private static readonly PathString _basePath = new PathString("/work");
 
@@ -156,7 +136,6 @@ namespace NuGet.Services.Work
                     .UsingConstructor(
                         typeof(Clock),
                         typeof(string),
-                        typeof(StorageHub),
                         typeof(ConfigurationHub))
                     .WithParameter(
                         new NamedParameter("instanceName", ServiceName.ToString() + "#api"));

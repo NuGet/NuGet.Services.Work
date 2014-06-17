@@ -1,16 +1,12 @@
 ﻿using System;
 using System.Reactive.Linq;
-using System.Collections.Generic;
 using System.Diagnostics.Tracing;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Practices.EnterpriseLibrary.SemanticLogging;
 using Microsoft.Practices.EnterpriseLibrary.SemanticLogging.Formatters;
 using Microsoft.WindowsAzure.Storage.Blob;
-using NuGet.Services.Storage;
-using System.Reactive.Subjects;
 using Microsoft.Practices.EnterpriseLibrary.SemanticLogging.Sinks;
 
 namespace NuGet.Services.Work.Monitoring
@@ -70,15 +66,14 @@ namespace NuGet.Services.Work.Monitoring
         private SinkSubscription<FlatFileSink> _eventSubscription;
 
         private readonly string _tempDirectory;
+        private readonly CloudBlobContainer _container;
         private string _tempFile;
         private string _blobName;
-
-        public StorageHub Storage { get; private set; }
-
-        public BlobInvocationLogCapture(InvocationState invocation, StorageHub storage)
+        
+        public BlobInvocationLogCapture(InvocationState invocation, CloudBlobContainer container)
             : base(invocation)
         {
-            Storage = storage;
+            _container = container;
 
             _tempDirectory = Path.Combine(Path.GetTempPath(), "InvocationLogs");
             _blobName = invocation.Id.ToString("N") + ".json";
@@ -105,7 +100,7 @@ namespace NuGet.Services.Work.Monitoring
             // Fetch the current logs if this is a continuation, we'll append to them during the invocation
             if (Invocation.IsContinuation)
             {
-                await Storage.Primary.Blobs.DownloadBlob(WorkService.InvocationLogsContainerBaseName, "invocations/" + _blobName, _tempFile);
+                await _container.DownloadBlob("invocations/" + _blobName, _tempFile);
             }
             
             // Capture the events into a JSON file and a plain text file
@@ -118,7 +113,7 @@ namespace NuGet.Services.Work.Monitoring
             _eventSubscription.Dispose();
 
             // Upload the file to blob storage
-            var logBlob = await Storage.Primary.Blobs.UploadBlob("application/json", _tempFile, WorkService.InvocationLogsContainerBaseName, "invocations/" + _blobName);
+            var logBlob = await _container.UploadBlob("invocations/" + _blobName, _tempFile, "application/json");
 
             // Delete the temp files
             File.Delete(_tempFile);
