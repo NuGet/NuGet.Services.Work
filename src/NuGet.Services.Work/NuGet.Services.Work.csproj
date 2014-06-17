@@ -43,6 +43,7 @@
     <Reference Include="Autofac.Integration.WebApi">
       <HintPath>..\..\packages\Autofac.WebApi5.3.0.0-rc1\lib\net45\Autofac.Integration.WebApi.dll</HintPath>
     </Reference>
+    <Reference Include="Dapper, Version=1.25.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\packages\Dapper.1.25\lib\net45\Dapper.dll</HintPath>
     </Reference>
@@ -53,7 +54,7 @@
     <Reference Include="EntityFramework.SqlServer">
       <HintPath>..\..\packages\EntityFramework.6.1.1-beta1\lib\net45\EntityFramework.SqlServer.dll</HintPath>
     </Reference>
-	<Reference Include="dotNetRDF, Version=1.0.3.0, Culture=neutral, PublicKeyToken=6055ffe4c97cc780, processorArchitecture=MSIL">
+    <Reference Include="dotNetRDF, Version=1.0.3.0, Culture=neutral, PublicKeyToken=6055ffe4c97cc780, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\packages\dotNetRDF.1.0.5.3315\lib\net40\dotNetRDF.dll</HintPath>
     </Reference>
@@ -188,14 +189,14 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\packages\NuGet.Core.2.8.2\lib\net40-Client\NuGet.Core.dll</HintPath>
     </Reference>
-    <Reference Include="NuGet.Indexing">
-      <HintPath>..\..\packages\NuGet.Indexing.3.0.29-r-master\lib\net45\NuGet.Indexing.dll</HintPath>
-    </Reference>
-    <Reference Include="NuGet.Services.Metadata.Catalog, Version=3.0.27.0, Culture=neutral, processorArchitecture=MSIL">
-    <Reference Include="NuGet.Services.Platform, Version=3.0.23.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="NuGet.Indexing, Version=3.0.31.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\packages\NuGet.Services.Metadata.Catalog.3.0.27-r-master\lib\net45\NuGet.Services.Metadata.Catalog.dll</HintPath>
+      <HintPath>..\..\packages\NuGet.Indexing.3.0.31-r-master\lib\net45\NuGet.Indexing.dll</HintPath>
     </Reference>
+    <Reference Include="NuGet.Services.Metadata.Catalog">
+      <HintPath>..\..\packages\NuGet.Services.Metadata.Catalog.3.0.30-r-master\lib\net45\NuGet.Services.Metadata.Catalog.dll</HintPath>
+    </Reference>
+    <Reference Include="NuGet.Services.Platform, Version=3.0.23.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\packages\NuGet.Services.Platform.3.0.23-r-master\lib\net45\NuGet.Services.Platform.dll</HintPath>
     </Reference>

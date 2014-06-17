@@ -1,29 +1,23 @@
-﻿using NuGet.Services.Metadata.Catalog;
-using NuGet.Services.Metadata.Catalog.Collecting;
+﻿using NuGet.Services.Metadata.Catalog.Collecting;
 using NuGet.Services.Metadata.Catalog.Persistence;
 using NuGet.Services.Configuration;
 using System;
-using System.Collections.Generic;
 using System.Diagnostics.Tracing;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
 using Newtonsoft.Json.Linq;
-using NuGet.Services.Storage;
+using Microsoft.WindowsAzure.Storage;
 
 namespace NuGet.Services.Work.Jobs
 {
     public class EmitResolverBlobsJob : JobHandler<EmitResolverBlobsEventSource>
     {
-        public EmitResolverBlobsJob(ConfigurationHub config, StorageHub storage)
+        public EmitResolverBlobsJob(ConfigurationHub config)
         {
-            Storage = storage;
             Config = config;
         }
 
         ConfigurationHub Config { get; set; }
-        StorageHub Storage { get; set; }
 
         public string CatalogUri { get; set; }
         //public string ConnectionString { get; set; }
@@ -34,7 +28,7 @@ namespace NuGet.Services.Work.Jobs
         {
             NuGet.Services.Metadata.Catalog.Persistence.Storage storage = new AzureStorage
             {
-                ConnectionString = Storage.Legacy.ConnectionString,
+                ConnectionString = Config.Storage.Legacy.GetConnectionString(),
                 Container = Container,
                 BaseAddress = BaseAddress
             };
