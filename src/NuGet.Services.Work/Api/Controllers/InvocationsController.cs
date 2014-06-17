@@ -1,15 +1,10 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Net;
-using System.Text;
 using System.Threading.Tasks;
 using System.Web.Http;
 using NuGet.Services.Http;
-using NuGet.Services.Work.Api.Models;
-using NuGet.Services.Storage;
 using NuGet.Services.Work.Models;
-using System.Net.Http;
 
 namespace NuGet.Services.Work.Api.Controllers
 {
@@ -17,12 +12,10 @@ namespace NuGet.Services.Work.Api.Controllers
     [Authorize(Roles = Roles.Admin)]
     public class InvocationsController : NuGetApiController
     {
-        public StorageHub Storage { get; private set; }
         public InvocationQueue Queue { get; private set; }
 
-        public InvocationsController(StorageHub storage, InvocationQueue queue)
+        public InvocationsController(InvocationQueue queue)
         {
-            Storage = storage;
             Queue = queue;
         }
 

@@ -1,24 +1,14 @@
 ﻿using System;
-using System.Reflection;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Text.RegularExpressions;
-using System.Linq.Expressions;
 using System.ComponentModel;
 using Microsoft.WindowsAzure.Storage.Table;
 using System.Diagnostics.Tracing;
 using System.ComponentModel.DataAnnotations.Schema;
-using NuGet.Services.Storage;
-using Autofac.Builder;
 
 namespace NuGet.Services.Work
 {
-    [Table("Jobs")]
-    public class JobDescription : AzureTableEntity
+    public class JobDescription
     {
-        public string Name { get { return PartitionKey; } set { PartitionKey = value; } }
+        public string Name { get; private set; }
         public string Description { get; set; }
         public Guid? EventProviderId { get; set; }
         public bool? Enabled { get; set; }
@@ -35,8 +25,8 @@ namespace NuGet.Services.Work
             : this(name, null, null, implementation) { }
 
         public JobDescription(string name, string description, Guid? eventProviderId, Type implementation)
-            : base(name, DateTimeOffset.UtcNow)
         {
+            Name = name;
             Description = description;
             EventProviderId = eventProviderId;
             Implementation = implementation;

@@ -3,17 +3,12 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.SqlClient;
 using System.Diagnostics.Tracing;
-using System.Globalization;
 using System.Linq;
-using System.Net;
-using System.Text;
 using System.Threading.Tasks;
-using System.Threading.Tasks.Dataflow;
 using Dapper;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
 using NuGet.Services.Configuration;
-using NuGet.Services.Storage;
 using NuGet.Services.Work.Jobs.Models;
 
 namespace NuGet.Services.Work.Jobs
@@ -47,15 +42,13 @@ namespace NuGet.Services.Work.Jobs
         public bool RunInParallel { get; set; }
 
         protected ConfigurationHub Config { get; private set; }
-        protected StorageHub Storage { get; private set; }
-
+        
         protected CloudBlobContainer SourceContainer { get; private set; }
         protected CloudBlobContainer DestinationContainer { get; private set; }
 
-        public BackupPackageBlobsJob(ConfigurationHub config, StorageHub storage)
+        public BackupPackageBlobsJob(ConfigurationHub config)
         {
             Config = config;
-            Storage = storage;
         }
 
         protected internal override async Task Execute()

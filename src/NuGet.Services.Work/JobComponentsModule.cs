@@ -1,13 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Autofac;
+﻿using Autofac;
 using NuGet.Services.Configuration;
-using NuGet.Services.ServiceModel;
-using NuGet.Services.Storage;
-using NuGet.Services.Work.Monitoring;
 
 namespace NuGet.Services.Work
 {
@@ -44,7 +36,6 @@ namespace NuGet.Services.Work
                     .UsingConstructor(
                         typeof(Clock),
                         typeof(string),
-                        typeof(StorageHub),
                         typeof(ConfigurationHub))
                     .WithParameter(
                         new NamedParameter("instanceName", _instanceName));

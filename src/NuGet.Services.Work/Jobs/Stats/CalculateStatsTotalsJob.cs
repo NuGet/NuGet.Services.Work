@@ -1,27 +1,22 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.SqlClient;
 using System.Diagnostics.Tracing;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using Dapper;
-using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
-using NuGet.Indexing;
 using NuGet.Services.Configuration;
-using NuGet.Services.Storage;
-using NuGet.Services.Work.Jobs.Bases;
-using NuGet.Services.Work.Monitoring;
 
 namespace NuGet.Services.Work.Jobs
 {
     [Description("Calculates the unique and total package counts and gets the total download count from SQL")]
     public class CalculateStatsTotalsJob : JobHandler<CaclculateStatsTotalsEventSource>
     {
-        protected StorageHub Storage { get; set; }
         protected ConfigurationHub Config { get; set; }
+
+        private const string ContentContainerName = "content";
+
 
         // Note the NOLOCK hints here!
         private static readonly string GetStatisticsSql = @"SELECT 
@@ -30,17 +25,15 @@ namespace NuGet.Services.Work.Jobs
                     (SELECT COUNT([Key]) FROM Packages WITH (NOLOCK) WHERE Listed = 1) AS TotalPackages,
                     (SELECT TotalDownloadCount FROM GallerySettings WITH (NOLOCK)) AS Downloads";
 
-        public CalculateStatsTotalsJob(StorageHub storage, ConfigurationHub config)
+        public CalculateStatsTotalsJob(ConfigurationHub config)
         {
-            Storage = storage;
             Config = config;
         }
 
         protected internal override async Task Execute()
         {
-            var contentAccount = Storage.Legacy.Account;
-            var contentContainerName = "content";
-            var contentContainer = contentAccount.CreateCloudBlobClient().GetContainerReference(contentContainerName);
+            var contentAccount = Config.Storage.Legacy;
+            var contentContainer = contentAccount.CreateCloudBlobClient().GetContainerReference(ContentContainerName);
 
             var packageDatabase = Config.Sql.Legacy;
 
@@ -60,7 +53,7 @@ namespace NuGet.Services.Work.Jobs
 
             string name = "stats-totals.json";
             Log.BeginningBlobUpload(name);
-            await Storage.Legacy.Blobs.UploadJsonBlob(totals, contentContainerName, name);
+            await contentContainer.UploadJsonBlob(name, totals);
             Log.FinishedBlobUpload();
         }
 

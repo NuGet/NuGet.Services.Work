@@ -1,20 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.IO;
-using System.Linq;
-using System.Runtime.Remoting.Messaging;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.WindowsAzure.Storage.Blob;
-using Microsoft.WindowsAzure.Storage.Queue;
-using Newtonsoft.Json.Linq;
 using NuGet.Services.Configuration;
 using NuGet.Services.Work.Configuration;
 using NuGet.Services.Work.Monitoring;
-using NuGet.Services.ServiceModel;
-using NuGet.Services.Storage;
 using NuGet.Services.Work.Models;
 
 namespace NuGet.Services.Work
@@ -31,7 +20,7 @@ namespace NuGet.Services.Work
         protected Clock Clock { get; set; }
         protected InvocationQueue Queue { get; set; }
         protected JobDispatcher Dispatcher { get; set; }
-        protected StorageHub Storage { get; set; }
+        protected ConfigurationHub Config { get; set; }
 
         public RunnerStatus Status
         {
@@ -47,13 +36,13 @@ namespace NuGet.Services.Work
             _pollInterval = pollInterval;
         }
 
-        public JobRunner(JobDispatcher dispatcher, InvocationQueue queue, ConfigurationHub config, StorageHub storage, Clock clock)
+        public JobRunner(JobDispatcher dispatcher, InvocationQueue queue, ConfigurationHub config, Clock clock)
             : this(config.GetSection<WorkConfiguration>().PollInterval)
         {
             Dispatcher = dispatcher;
             Queue = queue;
             Clock = clock;
-            Storage = storage;
+            Config = config;
         }
 
         public Task<object> GetCurrentStatus()
@@ -149,7 +138,9 @@ namespace NuGet.Services.Work
 
         protected internal virtual Task Dispatch(InvocationState invocation, CancellationToken cancelToken)
         {
-            return Dispatch(invocation, new BlobInvocationLogCapture(invocation, Storage), cancelToken);
+            var container = Config.Storage.Primary.CreateCloudBlobClient().GetContainerReference(WorkService.InvocationLogsContainerName);
+            var logCapture = new BlobInvocationLogCapture(invocation, container);
+            return Dispatch(invocation, logCapture, cancelToken);
         }
 
         protected internal virtual Task Dispatch(InvocationState invocation, InvocationLogCapture capture, CancellationToken cancelToken)
