@@ -25,9 +25,9 @@ namespace NuGet.Services.Work.Jobs
         private const string DateTimeFormatSpecifier = "O";
         private const int PushTimeOutInMinutes = 5;
         private const string DefaultMirrorBlobContainerName = "mirror";
-        private const string DefaultMirrorBlobName = "Mirror.json";
+        private const string DefaultMirrorBlobName = "mirror.json";
 
-        public string SourceV2FeedName { get; set; }
+        public string SourceV2Feed { get; set; }
         public string DestinationUri { get; set; }
         public string ApiKey { get; set; }
         public CloudStorageAccount MirrorStorage { get; set; }
@@ -47,10 +47,13 @@ namespace NuGet.Services.Work.Jobs
         protected async internal override Task Execute()
         {
             // Validate mandatory parameters
-            if (String.IsNullOrEmpty(SourceV2FeedName))
+            if (String.IsNullOrEmpty(SourceV2Feed))
             {
-                throw new ArgumentException("SourceV2FeedName cannot be null or empty");
+                throw new ArgumentException("SourceV2Feed cannot be null or empty");
             }
+
+            // If the SourceV2Feed is not a URI, the following line will throw URIFormatException
+            var sourceV2FeedUri = new Uri(SourceV2Feed);
 
             if (String.IsNullOrEmpty(DestinationUri))
             {
@@ -63,7 +66,7 @@ namespace NuGet.Services.Work.Jobs
             }
 
             // Arrange or set defaults for parameters that are not provided
-            UserAgent = String.Format("{0}v2FeedMirrorer", SourceV2FeedName);
+            UserAgent = String.Format("{0}v2FeedMirrorer", sourceV2FeedUri.DnsSafeHost);
             var timeOutPerPush = TimeSpan.FromMinutes(PushTimeOutInMinutes);
             MirrorStorage = MirrorStorage ?? Config.Storage.Legacy;
 
@@ -76,7 +79,7 @@ namespace NuGet.Services.Work.Jobs
             MirrorBlobContainer = MirrorStorage.CreateCloudBlobClient().GetContainerReference(MirrorBlobContainerName);
             MirrorBlobName = String.IsNullOrEmpty(MirrorBlobName) ? DefaultMirrorBlobName : MirrorBlobName;
 
-            var sourceUri = new Uri("http://" + SourceV2FeedName + "/api/v2/");
+            var sourceUri = new Uri(sourceV2FeedUri, "/api/v2/");
             var serviceContext = new DataServices.DataServiceContext(sourceUri)
             {
                 MergeOption = DataServices.MergeOption.OverwriteChanges,
@@ -106,7 +109,7 @@ namespace NuGet.Services.Work.Jobs
                 {
                     if ((Invocation.NextVisibleAt - DateTimeOffset.UtcNow) < TimeSpan.FromMinutes(120))
                     {
-                        // There are at most 40 packages returned by a single query (which will get downloaded and pushed)
+                        // Based on default configuration on the repository, there are at most 40 packages returned by a single query (which will get downloaded and pushed)
                         // With a conservative estimate of 3 minutes per package, expecting a minimum of
                         // 120 minutes to run 1 iteration of this do-while loop
                         await Extend(TimeSpan.FromMinutes(120));
