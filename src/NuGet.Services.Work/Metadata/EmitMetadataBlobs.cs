@@ -46,12 +46,12 @@ namespace NuGet.Services.Work.Jobs
 
             if (content == null)
             {
-                since = DateTime.MinValue;
+                since = DateTime.MinValue.ToUniversalTime();
             }
             else
             {
                 JToken cursorDoc = JsonLD.Util.JSONUtils.FromInputStream(content.GetContentStream());
-                since = DateTime.Parse((string)cursorDoc["http://nuget.org/collector/resolver#cursor"]["@value"]);
+                since = cursorDoc["http://nuget.org/collector/resolver#cursor"]["@value"].ToObject<DateTime>();
             }
 
             Uri requestUri = new Uri(CatalogUri);
@@ -59,7 +59,7 @@ namespace NuGet.Services.Work.Jobs
             ResolverCollector collector = new ResolverCollector(storage, 200) { Logger = EmitResolverBlobsEventSource.Log };
             since = (DateTime)await collector.Run(requestUri, since);
 
-            await storage.Save(cursorUri, new StringStorageContent(new JObject { { "http://nuget.org/collector/resolver#cursor", new JObject { { "@value", since.ToString() }, { "@type", "http://www.w3.org/2001/XMLSchema#dateTime" } } }, { "http://nuget.org/collector/resolver#source", CatalogUri } }.ToString()));
+            await storage.Save(cursorUri, new StringStorageContent(new JObject { { "http://nuget.org/collector/resolver#cursor", new JObject { { "@value", since.ToString("O") }, { "@type", "http://www.w3.org/2001/XMLSchema#dateTime" } } }, { "http://nuget.org/collector/resolver#source", CatalogUri } }.ToString()));
 
             await this.Enqueue(this.Invocation.Job, this.Invocation.Payload, TimeSpan.FromSeconds(3));
         }
