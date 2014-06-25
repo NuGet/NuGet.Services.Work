@@ -17,6 +17,24 @@ using DataServices = NuGetCoreRef::System.Data.Services.Client;
 
 namespace NuGet.Services.Work.Jobs
 {
+    /// <summary>
+    /// SourceExceptions are thrown when installing a package locally from Source fails
+    /// </summary>
+    class SourceException : Exception
+    {
+        private const string SourceExceptionMessage = "Source Exception: ";
+        public SourceException(Exception innerException) : base(SourceExceptionMessage + innerException.Message, innerException) { }
+    }
+
+    /// <summary>
+    /// DestinationExceptions are thrown when pushing a package to the destination fails
+    /// </summary>
+    class DestinationException : Exception
+    {
+        private const string DestinationExceptionMessage = "Destination Exception: ";
+        public DestinationException(Exception innerException) : base(DestinationExceptionMessage + innerException.Message, innerException) { }
+    }
+
     [Description("Job to mirror a NuGet V2 Repository by polling on a defined interval")]
     public class NuGetV2RepositoryMirrorerJob : JobHandler<NuGetV2RepositoryMirrorerEventSource>
     {
@@ -24,6 +42,7 @@ namespace NuGet.Services.Work.Jobs
         private const string ContentTypeJson = "application/json";
         private const string DateTimeFormatSpecifier = "O";
         private const int PushTimeOutInMinutes = 5;
+        private const int MaxRetries = 5;
         private const string DefaultMirrorBlobContainerName = "mirror";
         private const string DefaultMirrorBlobName = "mirror.json";
 
@@ -96,13 +115,26 @@ namespace NuGet.Services.Work.Jobs
             int count = 0;
             Exception caughtException = null;
 
-            //	POSSIBLE ERRORS
-            //	1) Conflict- Package already exists in destination
-            //		Action: Skip to next package to mirror. Update lastMirroredPackage.Published locally, i.e inside the while loop
-            //	2) Package is available on the feed but not available for download already. This happens quite a bit for packages just published to the Source
-            //		Action: 5 retries allowed. Log every retry. It is a retry only if a package could not be downloaded and mirrored. Update lastMirroredPackage.Published in  blob storage
-            //	3) Unknown Error
-            //		Action: Fault job. First, store the new lastPublished.Published, if any, in the blob and throw the unknown exception to fault the job
+            //
+            //  POSSIBLE ACTIONS when an error is encountered
+            //  A) Always Skip to next package
+            //  B) Retry 'MaxRetries' times and skip to next package
+            //  C) Retry 'MaxRetries' times and fail
+            //
+            //	KNOWN ERRORS
+            //	1) '409 Conflict' from Destination- Package already exists in destination
+            //		i)  Action: (A). Always Skip to next package
+            //      ii) Before skipping, Update lastMirroredPackage.Published locally, i.e inside the while loop
+            //	2) '403 Forbidden' from Source. For reasons unknown, certain listed packages are not available for download. Source returns "Access Denied"
+            //      i)  Action: (B). Retry 'MaxRetries' times and Skip to next package
+            //      ii) Log every retry. Before skipping, Update lastMirroredPackage.Published locally, i.e inside the while loop
+            //  3) '404 Not Found' from Source. Package is available on the feed but not available for download already
+            //      i)  Action: (C). Retry 'MaxRetries' times and Fail
+            //      ii) Log every retry. Update lastMirroredPackage.Published in blob storage
+            //	4) Unknown Error
+            //      i)  Action: (C). Retry 'MaxRetries' times and Fail
+            //      ii) Log every retry. Update lastMirroredPackage.Published in blob storage
+            //
             try
             {
                 do
@@ -134,7 +166,7 @@ namespace NuGet.Services.Work.Jobs
                         lastPublished = new DateTime(lastMirroredPackage.Published.Value.DateTime.Ticks, DateTimeKind.Utc);
                         Log.EndOfIteration(lastPublished.ToString(DateTimeFormatSpecifier));
                     }
-                    else if (retries == 0 || retries > 5)
+                    else if (retries == 0 || retries > MaxRetries)
                     {
                         break;
                     }
@@ -164,7 +196,9 @@ namespace NuGet.Services.Work.Jobs
         {
             Log.QueryNewPackages(serviceContext.BaseUri.AbsoluteUri, lastPublished.ToString(DateTimeFormatSpecifier));
             var packagesQuery = serviceContext.CreateQuery<DataServicePackage>("Packages");
+            // The following query gets packages published after 'lastPublished' and sorted by 'Published' ascending
             var queryOptionValue = String.Format("Published gt DateTime'{0}'", lastPublished.ToString(DateTimeFormatSpecifier));
+            packagesQuery = packagesQuery.AddQueryOption("$orderby", "Published");
             packagesQuery = packagesQuery.AddQueryOption("$filter", queryOptionValue);
             Log.QueryFilter(queryOptionValue);
             return packagesQuery.ToList();
@@ -191,32 +225,98 @@ namespace NuGet.Services.Work.Jobs
         {
             // Download the package locally into a temp folder. This prevents storing the package in memory
             // which becomes an issue with large packages. Push command uses OptimizedZipPackage and we will too
-            Log.AddingPackageLocally(package.ToString(), package.Published.Value.DateTime.ToString());
-            tempPackageManager.InstallPackage(package.Id, package.Version, ignoreDependencies: true, allowPrereleaseVersions: true);
-            Log.AddedPackageLocally(package.ToString());
+            string localPackagePath = String.Empty;
+            OptimizedZipPackage localPackage = null;
 
-            // Push the local package onto destination Repository
-            var localInstallPath = tempLocalRepo.PathResolver.GetInstallPath(package);
-            var localPackagePath = Path.Combine(localInstallPath, tempLocalRepo.PathResolver.GetPackageFileName(package));
-            var localPackage = new OptimizedZipPackage(localPackagePath);
+            try
+            {
+                Log.AddingPackageLocally(package.ToString(), package.Published.Value.DateTime.ToString());
+                tempPackageManager.InstallPackage(package.Id, package.Version, ignoreDependencies: true, allowPrereleaseVersions: true);
+                Log.AddedPackageLocally(package.ToString());
+            }
+            catch (Exception ex)
+            {
+                throw new SourceException(ex);
+            }
 
-            Log.PushingPackage(localPackage.ToString());
-            destinationServer.PushPackage(apiKey, localPackage, new FileInfo(localPackagePath).Length, timeOut);
+            try
+            {
+                // Push the local package onto destination Repository
+                var localInstallPath = tempLocalRepo.PathResolver.GetInstallPath(package);
+                localPackagePath = Path.Combine(localInstallPath, tempLocalRepo.PathResolver.GetPackageFileName(package));
+                localPackage = new OptimizedZipPackage(localPackagePath);
+                Log.PushingPackage(localPackage.ToString());
+                destinationServer.PushPackage(apiKey, localPackage, new FileInfo(localPackagePath).Length, timeOut);
+            }
+            catch (Exception ex)
+            {
+                throw new DestinationException(ex);
+            }
         }
 
-        private void ThrowIfStatusCodeIsNotConflict(Exception ex)
+        private HttpStatusCode? GetHttpStatusCodeFrom(Exception ex)
         {
-            // throw if the InnerException is null or if it not a WebException
-            if (ex.InnerException == null || !(ex.InnerException is WebException))
+            if (ex == null || !(ex is WebException))
+            {
+                return null;
+            }
+
+            // throw if the response in the WebException is not a HttpWebResponse or if the statusCode of the response if not 'Conflict'
+            var response = (ex as WebException).Response;
+            if (!(response is HttpWebResponse))
+            {
+                return null;
+            }
+
+            return ((HttpWebResponse)response).StatusCode;
+        }
+
+        private void ThrowSourceExceptionIfNeeded(SourceException ex, ref int retries, IPackage package)
+        {
+            HttpStatusCode? code = GetHttpStatusCodeFrom(ex.InnerException);
+
+            switch(code)
+            {
+                // '403 Forbidden' from Source. For reasons unknown, certain listed packages are not available for download. Source returns "Access Denied"
+                case HttpStatusCode.Forbidden:
+                    if (retries < MaxRetries)
+                        throw ex;
+
+                    // Since, retries >= MaxRetries
+                    // Set retries to and 0 and don't rethrow
+                    // This accomplishes max retries and skipping to next package
+                    retries = 0;
+                    Log.SkippedForbiddenPackage(package.ToString());
+                    break;
+
+                // '404 Not Found' from Source. Package is available on the feed but not available for download already
+                case HttpStatusCode.NotFound:
+                // Any other code or if code is null. Throw
+                default:
+                    throw ex;
+            }
+        }
+
+        private void ThrowDestinationExceptionIfNeeded(DestinationException ex, ref int retries, IPackage package)
+        {
+            var inner = ex.InnerException;
+            HttpStatusCode? code = (inner != null && inner is InvalidOperationException) ? GetHttpStatusCodeFrom(inner.InnerException) : GetHttpStatusCodeFrom(inner);
+
+            if (code == null || code != HttpStatusCode.Conflict)
             {
                 throw ex;
             }
 
-            // throw if the response in the WebException is not a HttpWebResponse or if the statusCode of the response if not 'Conflict'
-            var response = (ex.InnerException as WebException).Response;
-            if (!(response is HttpWebResponse) || ((HttpWebResponse)response).StatusCode != HttpStatusCode.Conflict)
+            switch (code)
             {
-                throw ex;
+                // '409 Conflict' from Destination- Package already exists in destination. Don't rethrow
+                case HttpStatusCode.Conflict:
+                    Log.PackageAlreadyExists(package.ToString());
+                    break;
+
+                // Any other code or if code is null. Throw
+                default:
+                    throw ex;
             }
         }
 
@@ -248,6 +348,7 @@ namespace NuGet.Services.Work.Jobs
             newPackages.Sort(delegate(DataServicePackage x, DataServicePackage y) { return Nullable.Compare<DateTimeOffset>(x.Published, y.Published); });
             Log.NewPackagesSortedByPublishedDate();
 
+            IPackage currentPackage = null;
             IPackage lastMirroredPackage = null;
             try
             {
@@ -255,31 +356,30 @@ namespace NuGet.Services.Work.Jobs
                 {
                     try
                     {
+                        currentPackage = package;
                         MirrorPackage(package, destinationServer, tempPackageManager, tempLocalRepo, apiKey, timeOut);
                         Log.PushedToDestination(++count);
-                        lastMirroredPackage = package;
-                        retries = 0;
                     }
-                    catch (InvalidOperationException ex)
+                    catch(SourceException ex)
                     {
-                        // Throw if InnerException is not a WebException OR if the StatusCode of the HttpWebResponse in the Web exception is not 'Conflict'
-                        ThrowIfStatusCodeIsNotConflict(ex);
-
-                        // The package has already been mirrored. Hence, the status Code 'Conflict'
-                        Log.PackageAlreadyExists(package.ToString());
-
-                        // Skip to next package. But, set lastMirroredPackage before doing so
-                        lastMirroredPackage = package;
+                        ThrowSourceExceptionIfNeeded(ex, ref retries, package);
                     }
+                    catch (DestinationException ex)
+                    {
+                        ThrowDestinationExceptionIfNeeded(ex, ref retries, package);
+                    }
+
+                    lastMirroredPackage = package;
+                    retries = 0;
                 }
             }
             catch (Exception ex)
             {
                 retries++;
                 Log.ServerUnreachable(retries, ex.Message);
-                if (lastMirroredPackage != null)
+                if (currentPackage != null)
                 {
-                    Log.MirrorFailed(lastMirroredPackage.ToString());
+                    Log.MirrorFailed(currentPackage.ToString());
                 }
             }
 
@@ -394,7 +494,7 @@ So, packages will be mirrored from {3} to {4} whose published Date is greater th
         [Event(
             eventId: 14,
             Level = EventLevel.Informational,
-            Message = "Need to retry mirroring since all the new packages published may not be available for mirroring or the remote server is not reachable. Retries performed: {0}. Exception: {1}")]
+            Message = "Need to retry mirroring, server is not reachable. Retries performed: {0}. Exception: {1}")]
         public void ServerUnreachable(int retries, string exception) { WriteEvent(14, retries, exception); }
 
         [Event(
@@ -408,5 +508,11 @@ So, packages will be mirrored from {3} to {4} whose published Date is greater th
             Level = EventLevel.Informational,
             Message = "Deleted temp folder for packages: {0}")]
         public void DeletedTempFolder(string tempFolder) { WriteEvent(16, tempFolder); }
+
+        [Event(
+            eventId: 17,
+            Level = EventLevel.Informational,
+            Message = "Skipped package '{0}', since, its access is Forbidden even after max retries")]
+        public void SkippedForbiddenPackage(string package) { WriteEvent(17, package); }
     }
 }
