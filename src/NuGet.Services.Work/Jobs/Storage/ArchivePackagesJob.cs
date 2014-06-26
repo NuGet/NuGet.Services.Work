@@ -21,8 +21,7 @@ namespace NuGet.Services.Work.Jobs
         private const string DefaultCursorBlob = "cursor.json";
         private const string ContentTypeJson = "application/json";
         private const string DateTimeFormatSpecifier = "O";
-        private const string LastPublishedKey = "lastPublished";
-        private const string LastLastEditedKey = "lastLastEdited";
+        private const string LastUpdatedKey = "lastUpdated";
 
         /// <summary>
         /// Gets or sets an Azure Storage Uri referring to a container to use as the source for package blobs
@@ -46,7 +45,7 @@ namespace NuGet.Services.Work.Jobs
         public string DestinationContainerName { get; set; }
 
         /// <summary>
-        /// Blob containing the cursor data. Cursor data comprises of LastPublished and LastLastEdited
+        /// Blob containing the cursor data. Cursor data comprises of lastUpdated
         /// </summary>
         public string CursorBlob { get; set; }
 
@@ -97,40 +96,68 @@ namespace NuGet.Services.Work.Jobs
             CursorBlob = String.IsNullOrEmpty(CursorBlob) ? DefaultCursorBlob : CursorBlob;
 
             Log.PreparingToArchive(Source.Credentials.AccountName, SourceContainer.Name, PrimaryDestination.Credentials.AccountName, PrimaryDestinationContainer.Name, PackageDatabase.DataSource, PackageDatabase.InitialCatalog);
-            await Archive(PrimaryDestination, PrimaryDestinationContainer);
+            await Archive(PrimaryDestinationContainer);
 
             if (SecondaryDestinationContainer != null)
             {
                 Log.PreparingToArchive2(SecondaryDestination.Credentials.AccountName, SecondaryDestinationContainer.Name);
-                await Archive(SecondaryDestination, SecondaryDestinationContainer);
+                await Archive(SecondaryDestinationContainer);
             }
         }
 
-        private async Task Archive(CloudStorageAccount destination, CloudBlobContainer destinationContainer)
+        private async Task Archive(CloudBlobContainer destinationContainer)
         {
             var cursorJObject = await GetJObject(destinationContainer, CursorBlob);
-            var lastPublished = cursorJObject.Value<DateTime>(LastPublishedKey);
-            var lastLastEdited = cursorJObject.Value<DateTime>(LastLastEditedKey);
+            var lastUpdated = cursorJObject[LastUpdatedKey].Value<DateTime>();
 
-            Log.CursorData(lastPublished.ToString(DateTimeFormatSpecifier), lastLastEdited.ToString(DateTimeFormatSpecifier));
+            Log.CursorData(lastUpdated.ToString(DateTimeFormatSpecifier));
 
-            Log.GatheringNewDBPackages(PackageDatabase.DataSource, PackageDatabase.InitialCatalog);
-            IList<PackageRef> packages;
+            Log.GatheringPackagesToArchiveFromDB(PackageDatabase.DataSource, PackageDatabase.InitialCatalog);
+            List<PackageRef> packages;
             using (var connection = await PackageDatabase.ConnectTo())
             {
                 packages = (await connection.QueryAsync<PackageRef>(@"
-                    SELECT pr.Id, p.NormalizedVersion AS Version, p.Hash
-                    FROM Packages p
-                    INNER JOIN PackageRegistrations pr ON p.PackageRegistrationKey = pr.[Key]"))
+			    SELECT pr.Id, p.NormalizedVersion AS Version, p.Hash, p.LastEdited, p.Published
+			    FROM Packages p
+			    INNER JOIN PackageRegistrations pr ON p.PackageRegistrationKey = pr.[Key]
+			    WHERE Published > @lastUpdated OR LastEdited > @lastUpdated", new { lastUpdated = lastUpdated }))
                     .ToList();
             }
-            
+            Log.GatheredPackagesToArchiveFromDB(packages.Count, PackageDatabase.DataSource, PackageDatabase.InitialCatalog);
+
+            var archiveSet = packages
+                .AsParallel()
+                .Select(r => Tuple.Create(StorageHelpers.GetPackageBlobName(r), StorageHelpers.GetPackageBackupBlobName(r)))
+                .ToList();
+
+            if (!WhatIf)
+            {
+                await destinationContainer.CreateIfNotExistsAsync();
+            }
+
+            Log.StartingArchive(archiveSet.Count);
+            await Extend(TimeSpan.FromMinutes(archiveSet.Count * 10));
+            foreach (var archiveItem in archiveSet)
+            {
+                await ArchivePackage(archiveItem.Item1, archiveItem.Item2, SourceContainer, destinationContainer);
+            }
+
+            var maxLastEdited = packages.Max(p => p.LastEdited);
+            var maxPublished = packages.Max(p => p.Published);
+
+            // Time is ever growing after all, simply store the max of published and lastEdited as lastUpdated
+            var newLastUpdated = maxLastEdited > maxPublished ? maxLastEdited : maxPublished;
+            var newLastUpdatedString = newLastUpdated.Value.ToString(DateTimeFormatSpecifier);
+
+            Log.NewCursorData(newLastUpdatedString);
+            cursorJObject[lastUpdated] = newLastUpdatedString;
+            await SetJObject(destinationContainer, CursorBlob, cursorJObject);
         }
 
-        private async Task BackupPackage(string sourceBlobName, string destinationBlobName, CloudBlobContainer destinationContainer)
+        private async Task ArchivePackage(string sourceBlobName, string destinationBlobName, CloudBlobContainer sourceContainer, CloudBlobContainer destinationContainer)
         {
             // Identify the source and destination blobs
-            var sourceBlob = SourceContainer.GetBlockBlobReference(sourceBlobName);
+            var sourceBlob = sourceContainer.GetBlockBlobReference(sourceBlobName);
             var destBlob = destinationContainer.GetBlockBlobReference(destinationBlobName);
 
             if (await destBlob.ExistsAsync())
@@ -176,40 +203,40 @@ namespace NuGet.Services.Work.Jobs
         [Event(
             eventId: 3,
             Level = EventLevel.Informational,
-            Message = "Cursor data: LastPublished is {0}, LastLastEdited is {1}")]
-        public void CursorData(string lastPublished, string lastLastEdited) { WriteEvent(3, lastPublished, lastLastEdited); }
+            Message = "Cursor data: LastUpdated is {0}")]
+        public void CursorData(string lastUpdated) { WriteEvent(3, lastUpdated); }
 
         [Event(
             eventId: 4,
             Level = EventLevel.Informational,
             Task = Tasks.GatheringDBPackages,
             Opcode = EventOpcode.Start,
-            Message = "Gathering list of new packages from {0}/{1}")]
-        public void GatheringNewDBPackages(string dbServer, string dbName) { WriteEvent(4, dbServer, dbName); }
+            Message = "Gathering list of packages to archive from {0}/{1}")]
+        public void GatheringPackagesToArchiveFromDB(string dbServer, string dbName) { WriteEvent(4, dbServer, dbName); }
 
         [Event(
             eventId: 5,
             Level = EventLevel.Informational,
             Task = Tasks.GatheringDBPackages,
             Opcode = EventOpcode.Stop,
-            Message = "Gathered {0} new packages from {1}/{2}")]
-        public void GatheredNewDBPackages(int gathered, string dbServer, string dbName) { WriteEvent(5, gathered, dbServer, dbName); }
+            Message = "Gathered {0} packages to archive from {1}/{2}")]
+        public void GatheredPackagesToArchiveFromDB(int gathered, string dbServer, string dbName) { WriteEvent(5, gathered, dbServer, dbName); }
 
         [Event(
             eventId: 6,
             Level = EventLevel.Informational,
-            Task = Tasks.GatheringDBPackages,
+            Task = Tasks.ArchivingPackages,
             Opcode = EventOpcode.Start,
-            Message = "Gathering list of edited packages from {0}/{1}")]
-        public void GatheringEditedDBPackages(string dbServer, string dbName) { WriteEvent(6, dbServer, dbName); }
+            Message = "Starting archive of {0} packages.")]
+        public void StartingArchive(int count) { WriteEvent(6, count); }
 
         [Event(
             eventId: 7,
             Level = EventLevel.Informational,
-            Task = Tasks.GatheringDBPackages,
+            Task = Tasks.ArchivingPackages,
             Opcode = EventOpcode.Stop,
-            Message = "Gathered {0} edited packages from {1}/{2}")]
-        public void GatheredEditedDBPackages(int gathered, string dbServer, string dbName) { WriteEvent(7, gathered, dbServer, dbName); }
+            Message = "Started archive.")]
+        public void StartedArchive() { WriteEvent(7); }
 
         [Event(
             eventId: 8,
@@ -238,11 +265,18 @@ namespace NuGet.Services.Work.Jobs
             Opcode = EventOpcode.Stop,
             Message = "Started copy of {0} to {1}.")]
         public void StartedCopy(string source, string dest) { WriteEvent(13, source, dest); }
+
+        [Event(
+            eventId: 14,
+            Level = EventLevel.Informational,
+            Message = "NewCursor data: LastUpdated is {0}")]
+        public void NewCursorData(string lastUpdated) { WriteEvent(14, lastUpdated); }
     }
 
     public static class Tasks
     {
         public const EventTask GatheringDBPackages = (EventTask)0x1;
-        public const EventTask StartingPackageCopy = (EventTask)0x2;
+        public const EventTask ArchivingPackages = (EventTask)0x2;
+        public const EventTask StartingPackageCopy = (EventTask)0x3;
     }
 }
