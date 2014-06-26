@@ -87,6 +87,21 @@ namespace NuGet.Services.Work.Jobs
             PrimaryDestination = PrimaryDestination ?? Config.Storage.Legacy;
             SecondaryDestination = SecondaryDestination ?? Config.Storage.Backup;
 
+            if (Source == null)
+            {
+                throw new ArgumentNullException("Source cannot be null");
+            }
+
+            if (PrimaryDestination == null)
+            {
+                throw new ArgumentNullException("Primary Destination cannot be null");
+            }
+
+            if (PackageDatabase == null)
+            {
+                throw new ArgumentNullException("PackageDatabase cannot be null");
+            }
+
             SourceContainer = Source.CreateCloudBlobClient().GetContainerReference(
                 String.IsNullOrEmpty(SourceContainerName) ? BlobContainerNames.LegacyPackages : SourceContainerName);
             PrimaryDestinationContainer = PrimaryDestination.CreateCloudBlobClient().GetContainerReference(
@@ -135,23 +150,26 @@ namespace NuGet.Services.Work.Jobs
                 await destinationContainer.CreateIfNotExistsAsync();
             }
 
-            Log.StartingArchive(archiveSet.Count);
-            await Extend(TimeSpan.FromMinutes(archiveSet.Count * 10));
-            foreach (var archiveItem in archiveSet)
+            if (archiveSet.Count > 0)
             {
-                await ArchivePackage(archiveItem.Item1, archiveItem.Item2, SourceContainer, destinationContainer);
+                Log.StartingArchive(archiveSet.Count);
+                await Extend(TimeSpan.FromMinutes(archiveSet.Count * 10));
+                foreach (var archiveItem in archiveSet)
+                {
+                    await ArchivePackage(archiveItem.Item1, archiveItem.Item2, SourceContainer, destinationContainer);
+                }
+
+                var maxLastEdited = packages.Max(p => p.LastEdited);
+                var maxPublished = packages.Max(p => p.Published);
+
+                // Time is ever growing after all, simply store the max of published and lastEdited as lastUpdated
+                var newLastUpdated = maxLastEdited > maxPublished ? maxLastEdited : maxPublished;
+                var newLastUpdatedString = newLastUpdated.Value.ToString(DateTimeFormatSpecifier);
+
+                Log.NewCursorData(newLastUpdatedString);
+                cursorJObject[LastUpdatedKey] = newLastUpdatedString;
+                await SetJObject(destinationContainer, CursorBlob, cursorJObject);
             }
-
-            var maxLastEdited = packages.Max(p => p.LastEdited);
-            var maxPublished = packages.Max(p => p.Published);
-
-            // Time is ever growing after all, simply store the max of published and lastEdited as lastUpdated
-            var newLastUpdated = maxLastEdited > maxPublished ? maxLastEdited : maxPublished;
-            var newLastUpdatedString = newLastUpdated.Value.ToString(DateTimeFormatSpecifier);
-
-            Log.NewCursorData(newLastUpdatedString);
-            cursorJObject[lastUpdated] = newLastUpdatedString;
-            await SetJObject(destinationContainer, CursorBlob, cursorJObject);
         }
 
         private async Task ArchivePackage(string sourceBlobName, string destinationBlobName, CloudBlobContainer sourceContainer, CloudBlobContainer destinationContainer)
