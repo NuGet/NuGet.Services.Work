@@ -21,7 +21,7 @@ namespace NuGet.Services.Work.Jobs
         private const string DefaultCursorBlob = "cursor.json";
         private const string ContentTypeJson = "application/json";
         private const string DateTimeFormatSpecifier = "O";
-        private const string LastUpdatedKey = "lastUpdated";
+        private const string CursorDateTimeKey = "cursorDateTime";
 
         /// <summary>
         /// Gets or sets an Azure Storage Uri referring to a container to use as the source for package blobs
@@ -45,7 +45,7 @@ namespace NuGet.Services.Work.Jobs
         public string DestinationContainerName { get; set; }
 
         /// <summary>
-        /// Blob containing the cursor data. Cursor data comprises of lastUpdated
+        /// Blob containing the cursor data. Cursor data comprises of cursorDateTime
         /// </summary>
         public string CursorBlob { get; set; }
 
@@ -123,9 +123,9 @@ namespace NuGet.Services.Work.Jobs
         private async Task Archive(CloudBlobContainer destinationContainer)
         {
             var cursorJObject = await GetJObject(destinationContainer, CursorBlob);
-            var lastUpdated = cursorJObject[LastUpdatedKey].Value<DateTime>();
+            var cursorDateTime = cursorJObject[CursorDateTimeKey].Value<DateTime>();
 
-            Log.CursorData(lastUpdated.ToString(DateTimeFormatSpecifier));
+            Log.CursorData(cursorDateTime.ToString(DateTimeFormatSpecifier));
 
             Log.GatheringPackagesToArchiveFromDB(PackageDatabase.DataSource, PackageDatabase.InitialCatalog);
             List<PackageRef> packages;
@@ -135,7 +135,7 @@ namespace NuGet.Services.Work.Jobs
 			    SELECT pr.Id, p.NormalizedVersion AS Version, p.Hash, p.LastEdited, p.Published
 			    FROM Packages p
 			    INNER JOIN PackageRegistrations pr ON p.PackageRegistrationKey = pr.[Key]
-			    WHERE Published > @lastUpdated OR LastEdited > @lastUpdated", new { lastUpdated = lastUpdated }))
+			    WHERE Published > @cursorDateTime OR LastEdited > @cursorDateTime", new { cursorDateTime = cursorDateTime }))
                     .ToList();
             }
             Log.GatheredPackagesToArchiveFromDB(packages.Count, PackageDatabase.DataSource, PackageDatabase.InitialCatalog);
@@ -162,12 +162,12 @@ namespace NuGet.Services.Work.Jobs
                 var maxLastEdited = packages.Max(p => p.LastEdited);
                 var maxPublished = packages.Max(p => p.Published);
 
-                // Time is ever growing after all, simply store the max of published and lastEdited as lastUpdated
-                var newLastUpdated = maxLastEdited > maxPublished ? maxLastEdited : maxPublished;
-                var newLastUpdatedString = newLastUpdated.Value.ToString(DateTimeFormatSpecifier);
+                // Time is ever increasing after all, simply store the max of published and lastEdited as cursorDateTime
+                var newCursorDateTime = maxLastEdited > maxPublished ? new DateTime(maxLastEdited.Value.Ticks, DateTimeKind.Utc) : new DateTime(maxPublished.Value.Ticks, DateTimeKind.Utc);
+                var newCursorDateTimeString = newCursorDateTime.ToString(DateTimeFormatSpecifier);
 
-                Log.NewCursorData(newLastUpdatedString);
-                cursorJObject[LastUpdatedKey] = newLastUpdatedString;
+                Log.NewCursorData(newCursorDateTimeString);
+                cursorJObject[CursorDateTimeKey] = newCursorDateTimeString;
                 await SetJObject(destinationContainer, CursorBlob, cursorJObject);
             }
         }
@@ -221,8 +221,8 @@ namespace NuGet.Services.Work.Jobs
         [Event(
             eventId: 3,
             Level = EventLevel.Informational,
-            Message = "Cursor data: LastUpdated is {0}")]
-        public void CursorData(string lastUpdated) { WriteEvent(3, lastUpdated); }
+            Message = "Cursor data: CursorDateTime is {0}")]
+        public void CursorData(string cursorDateTime) { WriteEvent(3, cursorDateTime); }
 
         [Event(
             eventId: 4,
@@ -287,8 +287,8 @@ namespace NuGet.Services.Work.Jobs
         [Event(
             eventId: 14,
             Level = EventLevel.Informational,
-            Message = "NewCursor data: LastUpdated is {0}")]
-        public void NewCursorData(string lastUpdated) { WriteEvent(14, lastUpdated); }
+            Message = "NewCursor data: CursorDateTime is {0}")]
+        public void NewCursorData(string cursorDateTime) { WriteEvent(14, cursorDateTime); }
     }
 
     public static class Tasks
