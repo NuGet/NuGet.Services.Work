@@ -273,6 +273,13 @@ namespace NuGet.Services.Work.Jobs
 
         private void ThrowSourceExceptionIfNeeded(SourceException ex, ref int retries, IPackage package)
         {
+            // TO BE DELETED
+            if(ex.InnerException is PathTooLongException)
+            {
+                Log.LogMessage(String.Format("PathTooLongException on package {0}", package.ToString()));
+                return;
+            }
+
             HttpStatusCode? code = GetHttpStatusCodeFrom(ex.InnerException);
 
             switch(code)
@@ -514,5 +521,11 @@ So, packages will be mirrored from {3} to {4} whose published Date is greater th
             Level = EventLevel.Informational,
             Message = "Skipped package '{0}', since, its access is Forbidden even after max retries")]
         public void SkippedForbiddenPackage(string package) { WriteEvent(17, package); }
+
+        [Event(
+            eventId:18,
+            Level=EventLevel.Informational,
+            Message="GENERAL LOG: {0}")]
+        public void LogMessage(string message) { WriteEvent(18, message); }
     }
 }
