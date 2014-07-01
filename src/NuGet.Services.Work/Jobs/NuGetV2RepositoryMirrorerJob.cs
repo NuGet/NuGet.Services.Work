@@ -39,6 +39,7 @@ namespace NuGet.Services.Work.Jobs
     public class NuGetV2RepositoryMirrorerJob : JobHandler<NuGetV2RepositoryMirrorerEventSource>
     {
         private const string LastPublishedKey = "lastPublished";
+
         private const string ContentTypeJson = "application/json";
         private const string DateTimeFormatSpecifier = "O";
         private const int PushTimeOutInMinutes = 5;
@@ -52,6 +53,7 @@ namespace NuGet.Services.Work.Jobs
         public CloudStorageAccount MirrorStorage { get; set; }
         public string MirrorBlobContainerName { get; set; }
         public string MirrorBlobName { get; set; }
+        public bool ExecuteDeletes { get; set; }
 
         protected ConfigurationHub Config { get; private set; }
 
@@ -107,12 +109,23 @@ namespace NuGet.Services.Work.Jobs
 
             var jObject = await GetJObject(MirrorBlobContainer, MirrorBlobName);
 
+            if (ExecuteDeletes)
+            {
+                var list = NuGetV2RepositoryMirrorDeletor.GetDeletedPackages(sourceUri, jObject);
+                foreach (var item in list)
+                {
+                    Log.LogMessage(item.ToString());
+                }
+                return;
+            }
+
             var oldLastPublished = jObject.Value<DateTime>(LastPublishedKey);
             var lastPublished = oldLastPublished;
             Log.PreparingToMirror(MirrorBlobName, lastPublished.ToString(DateTimeFormatSpecifier), lastPublished.Kind.ToString(), sourceUri.AbsoluteUri, DestinationUri);
 
             int retries = 0;
             int count = 0;
+            int skipIndex = 0;
             Exception caughtException = null;
 
             //
@@ -153,7 +166,7 @@ namespace NuGet.Services.Work.Jobs
                     // Query for packages published since lastPublished
                     PackageServer destinationServer = new PackageServer(DestinationUri, UserAgent);
 
-                    var lastMirroredPackage = QueryAndMirrorBatch(serviceContext, destinationServer, lastPublished, ApiKey, timeOutPerPush.Milliseconds, ref retries, ref count);
+                    var lastMirroredPackage = QueryAndMirrorBatch(serviceContext, destinationServer, oldLastPublished, ApiKey, timeOutPerPush.Milliseconds, ref retries, ref count, ref skipIndex);
                     if (lastMirroredPackage != null)
                     {
                         if (!lastMirroredPackage.Published.HasValue)
@@ -192,16 +205,18 @@ namespace NuGet.Services.Work.Jobs
             }
         }
 
-        private List<DataServicePackage> GetNewPackagesToMirror(DataServices.DataServiceContext serviceContext, DateTime lastPublished)
+        private DataServices.DataServiceQuery<DataServicePackage> GetNewPackagesToMirror(DataServices.DataServiceContext serviceContext, DateTime lastPublished)
         {
             Log.QueryNewPackages(serviceContext.BaseUri.AbsoluteUri, lastPublished.ToString(DateTimeFormatSpecifier));
             var packagesQuery = serviceContext.CreateQuery<DataServicePackage>("Packages");
             // The following query gets packages published after 'lastPublished' and sorted by 'Published' ascending
             var queryOptionValue = String.Format("Published gt DateTime'{0}'", lastPublished.ToString(DateTimeFormatSpecifier));
             packagesQuery = packagesQuery.AddQueryOption("$orderby", "Published");
+            packagesQuery = packagesQuery.AddQueryOption("$orderby", "Id");
+            packagesQuery = packagesQuery.AddQueryOption("$orderby", "Version");
             packagesQuery = packagesQuery.AddQueryOption("$filter", queryOptionValue);
             Log.QueryFilter(queryOptionValue);
-            return packagesQuery.ToList();
+            return packagesQuery;
         }
 
         private string GetTempFolderPath(string sourceV2FeedName)
@@ -333,15 +348,9 @@ namespace NuGet.Services.Work.Jobs
         /// </summary>
         /// <returns>Returns lastMirroredPackage or null</returns>
         private IPackage QueryAndMirrorBatch(DataServices.DataServiceContext serviceContext, PackageServer destinationServer, DateTime lastPublished,
-        string apiKey, int timeOut, ref int retries, ref int count)
+        string apiKey, int timeOut, ref int retries, ref int count, ref int skipIndex)
         {
             var newPackages = GetNewPackagesToMirror(serviceContext, lastPublished);
-            Log.PackagesCopiedCount(newPackages.Count);
-
-            if (newPackages.Count == 0)
-            {
-                return null;
-            }
 
             // Push packages
             var tempFolderPath = GetTempFolderPath(serviceContext.BaseUri.DnsSafeHost);
@@ -350,35 +359,43 @@ namespace NuGet.Services.Work.Jobs
             var tempLocalRepo = new LocalPackageRepository(tempFolderPath);
             var tempPackageManager = new PackageManager(new DataServicePackageRepository(serviceContext.BaseUri), tempFolderPath);
 
-            // Packages returned are not sorted by Published Date but by name
-            // Sort them by Published Date in ascending order so that the packages are pushed to the mirror in that order
-            newPackages.Sort(delegate(DataServicePackage x, DataServicePackage y) { return Nullable.Compare<DateTimeOffset>(x.Published, y.Published); });
-            Log.NewPackagesSortedByPublishedDate();
-
             IPackage currentPackage = null;
             IPackage lastMirroredPackage = null;
             try
             {
-                foreach (IPackage package in newPackages)
+                do
                 {
-                    try
+                    var newPackagesList = newPackages.Skip(skipIndex).ToList();
+                    Log.PackagesCopyCount(newPackagesList.Count);
+
+                    if (newPackagesList.Count == 0)
                     {
-                        currentPackage = package;
-                        MirrorPackage(package, destinationServer, tempPackageManager, tempLocalRepo, apiKey, timeOut);
-                        Log.PushedToDestination(++count);
-                    }
-                    catch(SourceException ex)
-                    {
-                        ThrowSourceExceptionIfNeeded(ex, ref retries, package);
-                    }
-                    catch (DestinationException ex)
-                    {
-                        ThrowDestinationExceptionIfNeeded(ex, ref retries, package);
+                        return null;
                     }
 
-                    lastMirroredPackage = package;
-                    retries = 0;
-                }
+                    foreach (IPackage package in newPackagesList)
+                    {
+                        try
+                        {
+                            currentPackage = package;
+                            MirrorPackage(package, destinationServer, tempPackageManager, tempLocalRepo, apiKey, timeOut);
+                            Log.PushedToDestination(++count);
+                        }
+                        catch (SourceException ex)
+                        {
+                            ThrowSourceExceptionIfNeeded(ex, ref retries, package);
+                        }
+                        catch (DestinationException ex)
+                        {
+                            ThrowDestinationExceptionIfNeeded(ex, ref retries, package);
+                        }
+
+                        lastMirroredPackage = package;
+                        retries = 0;
+                    }
+
+                    skipIndex = skipIndex + newPackagesList.Count;
+                } while (true);
             }
             catch (Exception ex)
             {
@@ -472,7 +489,7 @@ So, packages will be mirrored from {3} to {4} whose published Date is greater th
             eventId: 9,
             Level = EventLevel.Informational,
             Message = "Number of packages to copy in this iteration : {0}")]
-        public void PackagesCopiedCount(int packagesCopiedCount) { WriteEvent(9, packagesCopiedCount); }
+        public void PackagesCopyCount(int packagesCopiedCount) { WriteEvent(9, packagesCopiedCount); }
 
         [Event(
             eventId: 10,
