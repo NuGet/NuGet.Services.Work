@@ -14,10 +14,10 @@ namespace NuGet.Services.Work.Jobs
 {
     public class MinPackage : IComparable<MinPackage>
     {
-        public const string IdKey = "Id";
-        public const string VersionKey = "Version";
-        public const string SourcePublishedKey = "SourcePublished";
-        public const string DeletedKey = "Deleted";
+        public const string IdKey = "id";
+        public const string VersionKey = "version";
+        public const string SourcePublishedKey = "sourcePublished";
+        public const string DeletedKey = "deleted";
         public string Id { get; set; }
         public SemanticVersion Version { get; set; }
         public DateTime SourcePublished { get; set; }
@@ -55,7 +55,7 @@ namespace NuGet.Services.Work.Jobs
     }
     public class NuGetV2RepositoryMirrorDeletor
     {
-        public const string PackageIndexKey = "PackageIndex";
+        public const string PackageIndexKey = "packageIndex";
         private const string CountDateTimeRangeFormat = "Packages/$count/?$filter=Published ge DateTime'{0}' and Published lt DateTime'{1}'";
 
         private static int GetPackagesCount(Uri v2Feed, DateTime start, DateTime end)

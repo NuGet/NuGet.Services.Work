@@ -38,7 +38,13 @@ namespace NuGet.Services.Work.Jobs
     [Description("Job to mirror a NuGet V2 Repository by polling on a defined interval")]
     public class NuGetV2RepositoryMirrorerJob : JobHandler<NuGetV2RepositoryMirrorerEventSource>
     {
-        private const string LastPublishedKey = "lastPublished";
+        // Mirror Json Keys
+        public const string LastPublishedKey = "lastPublished";
+        public const string IdKey = "id";
+        public const string VersionKey = "version";
+        public const string SourcePublishedKey = "sourcePublished";
+        public const string DeletedKey = "deleted";
+        public const string PackageIndexKey = "packageIndex";
 
         private const string ContentTypeJson = "application/json";
         private const string DateTimeFormatSpecifier = "O";
@@ -107,11 +113,11 @@ namespace NuGet.Services.Work.Jobs
                 IgnoreMissingProperties = true,
             };
 
-            var jObject = await GetJObject(MirrorBlobContainer, MirrorBlobName);
+            var mirrorJson = await GetJObject(MirrorBlobContainer, MirrorBlobName);
 
             if (ExecuteDeletes)
             {
-                var list = NuGetV2RepositoryMirrorDeletor.GetDeletedPackages(sourceUri, jObject);
+                var list = NuGetV2RepositoryMirrorDeletor.GetDeletedPackages(sourceUri, mirrorJson);
                 foreach (var item in list)
                 {
                     Log.LogMessage(item.ToString());
@@ -119,7 +125,7 @@ namespace NuGet.Services.Work.Jobs
                 return;
             }
 
-            var oldLastPublished = jObject.Value<DateTime>(LastPublishedKey);
+            var oldLastPublished = mirrorJson.Value<DateTime>(LastPublishedKey);
             var lastPublished = oldLastPublished;
             Log.PreparingToMirror(MirrorBlobName, lastPublished.ToString(DateTimeFormatSpecifier), lastPublished.Kind.ToString(), sourceUri.AbsoluteUri, DestinationUri);
 
@@ -163,10 +169,10 @@ namespace NuGet.Services.Work.Jobs
                     // In each query, at most, 40 packages may be returned. So, continue performing the queries
                     // in this do-while, so long as there are results returned
 
-                    // Query for packages published since lastPublished
+                    // Query for packages published since oldLastPublished
                     PackageServer destinationServer = new PackageServer(DestinationUri, UserAgent);
 
-                    var lastMirroredPackage = QueryAndMirrorBatch(serviceContext, destinationServer, oldLastPublished, ApiKey, timeOutPerPush.Milliseconds, ref retries, ref count, ref skipIndex);
+                    var lastMirroredPackage = QueryAndMirrorBatch(serviceContext, destinationServer, oldLastPublished, ApiKey, timeOutPerPush.Milliseconds, mirrorJson, ref retries, ref count, ref skipIndex);
                     if (lastMirroredPackage != null)
                     {
                         if (!lastMirroredPackage.Published.HasValue)
@@ -194,8 +200,8 @@ namespace NuGet.Services.Work.Jobs
 
             if (!oldLastPublished.Equals(lastPublished))
             {
-                jObject[LastPublishedKey] = lastPublished.ToString(DateTimeFormatSpecifier);
-                await SetJObject(MirrorBlobContainer, MirrorBlobName, jObject);
+                mirrorJson[LastPublishedKey] = lastPublished.ToString(DateTimeFormatSpecifier);
+                await SetJObject(MirrorBlobContainer, MirrorBlobName, mirrorJson);
                 Log.NewLastPublishedAtEndOfInvocation(MirrorBlobName, lastPublished.ToString(DateTimeFormatSpecifier), lastPublished.Kind.ToString());
             }
 
@@ -211,9 +217,7 @@ namespace NuGet.Services.Work.Jobs
             var packagesQuery = serviceContext.CreateQuery<DataServicePackage>("Packages");
             // The following query gets packages published after 'lastPublished' and sorted by 'Published' ascending
             var queryOptionValue = String.Format("Published gt DateTime'{0}'", lastPublished.ToString(DateTimeFormatSpecifier));
-            packagesQuery = packagesQuery.AddQueryOption("$orderby", "Published");
-            packagesQuery = packagesQuery.AddQueryOption("$orderby", "Id");
-            packagesQuery = packagesQuery.AddQueryOption("$orderby", "Version");
+            packagesQuery = packagesQuery.AddQueryOption("$orderby", "Published, Id, Version");
             packagesQuery = packagesQuery.AddQueryOption("$filter", queryOptionValue);
             Log.QueryFilter(queryOptionValue);
             return packagesQuery;
@@ -342,13 +346,36 @@ namespace NuGet.Services.Work.Jobs
             }
         }
 
+        private JObject GetNewPackage(IPackage package)
+        {
+            JObject jObject = new JObject();
+            var utcdt = new DateTime(package.Published.Value.Ticks, DateTimeKind.Utc);
+            jObject.Add(SourcePublishedKey, utcdt.ToString(DateTimeFormatSpecifier));
+            jObject.Add(IdKey, package.Id);
+            jObject.Add(VersionKey, package.Version.ToString());
+            // No need to add Deleted at this point
+            return jObject;
+        }
+
+        private void AddNewPackage(JObject mirrorJson, IPackage package)
+        {
+            // TODO: Check for prior existence of the package Id, version and delete the old one if SourceLastPublished is not the same
+            // This logic has to be in the 409 Conflict path
+            var array = mirrorJson[PackageIndexKey] as JArray;
+            if (array == null)
+            {
+                throw new InvalidOperationException("There is no array of 'packageIndex' in mirror json");
+            }
+            array.Add(GetNewPackage(package));
+        }
+
         /// <summary>
         /// Queries for packages published after 'lastPublished'. At most, 40 packages may be returned
         /// Mirror that batch of packages to the destination server
         /// </summary>
         /// <returns>Returns lastMirroredPackage or null</returns>
         private IPackage QueryAndMirrorBatch(DataServices.DataServiceContext serviceContext, PackageServer destinationServer, DateTime lastPublished,
-        string apiKey, int timeOut, ref int retries, ref int count, ref int skipIndex)
+        string apiKey, int timeOut, JObject mirrorJson, ref int retries, ref int count, ref int skipIndex)
         {
             var newPackages = GetNewPackagesToMirror(serviceContext, lastPublished);
 
@@ -370,7 +397,7 @@ namespace NuGet.Services.Work.Jobs
 
                     if (newPackagesList.Count == 0)
                     {
-                        return null;
+                        break;
                     }
 
                     foreach (IPackage package in newPackagesList)
@@ -390,11 +417,11 @@ namespace NuGet.Services.Work.Jobs
                             ThrowDestinationExceptionIfNeeded(ex, ref retries, package);
                         }
 
+                        AddNewPackage(mirrorJson, package);
                         lastMirroredPackage = package;
                         retries = 0;
+                        ++skipIndex;
                     }
-
-                    skipIndex = skipIndex + newPackagesList.Count;
                 } while (true);
             }
             catch (Exception ex)
