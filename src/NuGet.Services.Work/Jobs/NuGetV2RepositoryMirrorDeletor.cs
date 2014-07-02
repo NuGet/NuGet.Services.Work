@@ -71,25 +71,6 @@ namespace NuGet.Services.Work.Jobs
             return Int32.Parse(responseString);
         }
 
-        private static int GetMidIndex(List<MinPackage> destinationPackages, int startIndex, int endIndex, DateTime mid)
-        {
-            int midIndex = -1;
-            for(int i = startIndex; i < endIndex; i++)
-            {
-                if (destinationPackages[i].SourcePublished >= mid)
-                {
-                    midIndex = i;
-                    break;
-                }
-            }
-
-            if (midIndex == -1)
-            {
-                throw new InvalidOperationException("WRONG. MidIndex cannot be -1");
-            }
-            return midIndex;
-        }
-
         public static List<int> GetDeletedPackageIndices(Uri sourceUri, List<MinPackage> destinationPackages, int startIndex, int endIndex, DateTime dateTime)
         {
             var serviceContext = new DataServices.DataServiceContext(sourceUri)
@@ -135,10 +116,17 @@ namespace NuGet.Services.Work.Jobs
             return deletedPackageIndices;
         }
 
-        public static List<int> GetDeletedPackageIndices(Uri sourceUri, List<MinPackage> destinationPackages, int startIndex, int endIndex, DateTime start, DateTime end)
+        public static List<int> GetDeletedPackageIndices(Uri sourceUri, List<MinPackage> destinationPackages, int startIndex, int endIndex)
         {
-            var EmptyPackages = new List<int>();
+            // Set 'start' as the SourcePublished of destination package at 'startIndex'
+            var start = destinationPackages[startIndex].SourcePublished;
 
+            // Search is (>= start && < end), in OData words (Packages/$count/?$filter=Published ge DateTime'{0}' and Published lt DateTime'{1}')
+            // So, set end to SourcePublished of destination package at 'endIndex'. This ensures that the result from the source has a package
+            // corresponding to package at 'endIndex - 1'. package at 'startIndex' is accounted for since search is >= start
+            var end = endIndex != destinationPackages.Count ? destinationPackages[endIndex].SourcePublished : destinationPackages[endIndex - 1].SourcePublished.AddSeconds(1);
+
+            var EmptyPackages = new List<int>();
             if (start > end)
             {
                 return EmptyPackages;
@@ -176,15 +164,11 @@ namespace NuGet.Services.Work.Jobs
 
             var diffCount = rightCount - leftCount;
 
-            // At this point, diffCount is greater than 0 and leftCount is not 0
-            // There should be some packages to be returned
-            var halfSpan = new TimeSpan((end - start).Ticks / 2);
-            var mid = start.Add(halfSpan);
+            var midIndex = (startIndex + endIndex) / 2;
+            var mid = destinationPackages[midIndex].SourcePublished;
 
-            var midIndex = GetMidIndex(destinationPackages, startIndex, endIndex, mid);
-
-            var left = GetDeletedPackageIndices(sourceUri, destinationPackages, startIndex, midIndex, start, mid);
-            var right = GetDeletedPackageIndices(sourceUri, destinationPackages, midIndex, endIndex, mid, end);
+            var left = GetDeletedPackageIndices(sourceUri, destinationPackages, startIndex, midIndex);
+            var right = GetDeletedPackageIndices(sourceUri, destinationPackages, midIndex, endIndex);
 
             if (diffCount != (left.Count + right.Count))
             {
@@ -231,12 +215,7 @@ namespace NuGet.Services.Work.Jobs
                 return destinationPackages;
             }
 
-            // Set 'start' as the SourcePublished of the first destination package
-            var start = destinationPackages[0].SourcePublished;
-            // Set 'end' as the SourcePublished of the last destination package
-            var end = destinationPackages[destinationPackages.Count - 1].SourcePublished.AddSeconds(1);
-
-            var deletedPackageIndices = GetDeletedPackageIndices(sourceUri, destinationPackages, 0, destinationPackages.Count, start, end);
+            var deletedPackageIndices = GetDeletedPackageIndices(sourceUri, destinationPackages, 0, destinationPackages.Count);
 
             var list = new List<MinPackage>();
             foreach (var index in deletedPackageIndices)
