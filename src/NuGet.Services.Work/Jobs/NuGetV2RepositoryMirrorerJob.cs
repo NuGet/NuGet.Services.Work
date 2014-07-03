@@ -135,6 +135,10 @@ namespace NuGet.Services.Work.Jobs
                     caughtException = ex;
                 }
                 await SetJObject(MirrorBlobContainer, MirrorBlobName, mirrorJson);
+                if (caughtException != null)
+                {
+                    throw caughtException;
+                }
                 return;
             }
 

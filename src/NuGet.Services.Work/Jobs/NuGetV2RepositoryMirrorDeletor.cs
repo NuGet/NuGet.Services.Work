@@ -61,7 +61,7 @@ namespace NuGet.Services.Work.Jobs
             }
         }
         public const string PackageIndexKey = "packageIndex";
-        private const string CountDateTimeRangeFormat = "Packages/$count/?$filter=Published ge DateTime'{0}' and Published lt DateTime'{1}'";
+        private const string CountDateTimeRangeFormat = "Packages/$count/?$filter=Published ge DateTime'{0}' and Published lt DateTime'{1}'&$orderby=Published";
 
         private static int GetPackagesCount(Uri v2Feed, DateTime start, DateTime end)
         {
@@ -233,6 +233,19 @@ namespace NuGet.Services.Work.Jobs
             return list;
         }
 
+        public static async Task DeletePackage(SqlConnection connection, CloudStorageAccount account, JObject sourceJObject, string id, string version)
+        {
+            var dynamicPackages = await PackageDeletor.GetDeletePackages(connection, id, version, allVersions: false);
+            foreach (var dynamicPackage in dynamicPackages)
+            {
+                NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.DeletingPackage(sourceJObject.ToString());
+                await PackageDeletor.DeletePackage(dynamicPackage, connection, account);
+                var deletedTime = DateTime.UtcNow.ToString("O");
+                sourceJObject[MinPackage.DeletedKey] = deletedTime;
+                NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.DeletedPackage(sourceJObject.ToString(), deletedTime);
+            }
+        }
+
         public static async Task DeletePackages(Uri sourceUri, JObject mirrorJson, CloudStorageAccount account, SqlConnectionStringBuilder cstr)
         {
             var minPackagesToBeDeleted = GetDeletedPackages(sourceUri, mirrorJson);
@@ -242,15 +255,7 @@ namespace NuGet.Services.Work.Jobs
                 await connection.OpenAsync();
                 foreach(var minPackage in minPackagesToBeDeleted)
                 {
-                    var dynamicPackages = await PackageDeletor.GetDeletePackages(connection, minPackage.Id, minPackage.Version.ToString(), allVersions: false);
-                    foreach (var dynamicPackage in dynamicPackages)
-                    {
-                        NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.DeletingPackage(minPackage.ToString());
-                        await PackageDeletor.DeletePackage(dynamicPackage, connection, account);
-                        var deletedTime = DateTime.UtcNow.ToString("O");
-                        minPackage.SourceJObject[MinPackage.DeletedKey] = deletedTime;
-                        NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.DeletedPackage(minPackage.ToString(), deletedTime);
-                    }
+                    await DeletePackage(connection, account, minPackage.SourceJObject, minPackage.Id, minPackage.Version.ToString());
                 }
             }
         }
