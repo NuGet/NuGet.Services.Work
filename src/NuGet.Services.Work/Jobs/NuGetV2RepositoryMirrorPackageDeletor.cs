@@ -1,10 +1,8 @@
 ﻿extern alias NuGetCoreRef;
 using Microsoft.WindowsAzure.Storage;
 using Newtonsoft.Json.Linq;
-using NuGet.Services.Work.Helpers;
 using System;
 using System.Collections.Generic;
-using System.Data.SqlClient;
 using System.Diagnostics.Tracing;
 using System.IO;
 using System.Linq;
@@ -107,7 +105,7 @@ namespace NuGet.Services.Work.Jobs
             for(int i = startIndex; i < endIndex; i++)
             {
                 var destPackage = destinationPackages[i];
-                var destPackageInSource = sourcePackages.Where(s => String.Equals(s.Id, destPackage.Id) && s.Version.Equals(destPackage.Version)).SingleOrDefault();
+                var destPackageInSource = sourcePackages.Where(s => String.Equals(s.Id, destPackage.Id) && s.Version.Equals(destPackage.Version)).Single();
                 if(destPackageInSource == null)
                 {
                     // This destination package is not present in source
@@ -137,7 +135,6 @@ namespace NuGet.Services.Work.Jobs
 
             if(start == end)
             {
-                NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.StartEqualsEnd(start.ToString("O"), (endIndex - startIndex));
                 return GetDeletedPackageIndices(sourceUri, destinationPackages, startIndex, endIndex, start);
             }
 
@@ -167,7 +164,6 @@ namespace NuGet.Services.Work.Jobs
             }
 
             var diffCount = rightCount - leftCount;
-            NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.DiffCountBetween(start.ToString("O"), end.ToString("O"), diffCount);
 
             var midIndex = (startIndex + endIndex) / 2;
             var mid = destinationPackages[midIndex].SourcePublished;
@@ -230,26 +226,6 @@ namespace NuGet.Services.Work.Jobs
 
             return list;
         }
-
-        public static async Task DeletePackages(Uri sourceUri, JObject mirrorJson, CloudStorageAccount account, SqlConnectionStringBuilder cstr)
-        {
-            var minPackagesToBeDeleted = GetDeletedPackages(sourceUri, mirrorJson);
-            NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.TotalNumberOfPackagesToBeDeleted(minPackagesToBeDeleted.Count);
-            using(var connection = new SqlConnection(cstr.ConnectionString))
-            {
-                await connection.OpenAsync();
-                foreach(var minPackage in minPackagesToBeDeleted)
-                {
-                    var dynamicPackages = await PackageDeletor.GetDeletePackages(account, connection, minPackage.Id, minPackage.Version.ToString(), allVersions: false);
-                    foreach (var dynamicPackage in dynamicPackages)
-                    {
-                        NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.DeletingPackage(minPackage.ToString());
-                        await PackageDeletor.DeletePackage(dynamicPackage, connection, account);
-                        NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.DeletedPackage(minPackage.ToString(), DateTime.UtcNow.ToString("O"));
-                    }
-                }
-            }
-        }
     }
 
     public class NuGetV2RepositoryMirrorPackageDeletorEventSource : EventSource
@@ -273,7 +249,7 @@ namespace NuGet.Services.Work.Jobs
         [Event(
             eventId: 3,
             Level = EventLevel.Informational,
-            Message = "Total number of packages to be deleted : {0}")]
+            Message = "'start' == 'end'. It is {0}. Simply iterate through the packages. DiffCount = {1}")]
         public void TotalNumberOfPackagesToBeDeleted(int totalDiffCount) { WriteEvent(3, totalDiffCount); }
 
         [Event(

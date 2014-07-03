@@ -117,11 +117,9 @@ namespace NuGet.Services.Work.Jobs
 
             if (ExecuteDeletes)
             {
-                var list = NuGetV2RepositoryMirrorDeletor.GetDeletedPackages(sourceUri, mirrorJson);
-                foreach (var item in list)
-                {
-                    Log.LogMessage(item.ToString());
-                }
+                AddEventSource(NuGetV2RepositoryMirrorPackageDeletorEventSource.Log);
+                // Packages are in Legacy account. PackageDatabase is the InitialCatalog in the legacy account
+                await NuGetV2RepositoryMirrorPackageDeletor.DeletePackages(sourceUri, mirrorJson, Config.Storage.Legacy, Config.Sql.Legacy);
                 return;
             }
 
