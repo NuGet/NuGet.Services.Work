@@ -15,49 +15,51 @@ using DataServices = NuGetCoreRef::System.Data.Services.Client;
 
 namespace NuGet.Services.Work.Jobs
 {
-    public class MinPackage : IComparable<MinPackage>
-    {
-        public const string IdKey = "id";
-        public const string VersionKey = "version";
-        public const string SourcePublishedKey = "sourcePublished";
-        public const string DeletedKey = "deleted";
-        public string Id { get; set; }
-        public SemanticVersion Version { get; set; }
-        public DateTime SourcePublished { get; set; }
-        public DateTime? Deleted { get; set; }
-    
-        public int CompareTo(MinPackage other)
-        {
- 	        return this.SourcePublished.CompareTo(other.SourcePublished);
-        }
-
-        public static MinPackage GetMinPackage(JObject jObject)
-        {
-            var minPackage = new MinPackage();
-            minPackage.Id = jObject[IdKey].ToString();
-            minPackage.Version = new SemanticVersion(jObject[VersionKey].ToString());
-            var sourcePublished = jObject[SourcePublishedKey].Value<DateTime>();
-            minPackage.SourcePublished = new DateTime(sourcePublished.Ticks, DateTimeKind.Utc);
-
-            var deletedToken = jObject[DeletedKey];
-            if(deletedToken != null)
-            {
-                var deleted = jObject[DeletedKey].Value<DateTime>();
-                minPackage.Deleted = new DateTime(deleted.Ticks, DateTimeKind.Utc);
-            }
-
-            return minPackage;
-        }
-
-        public override string ToString()
-        {
-            const string stringFormat = "{0}/{1}/{2}/{3}";
-            const string nullString = "NULL";
-            return String.Format(stringFormat, Id, Version.ToString(), SourcePublished.ToString("O"), Deleted.HasValue ? Deleted.Value.ToString("O") : nullString);
-        }
-    }
     public class NuGetV2RepositoryMirrorPackageDeletor
     {
+        private class MinPackage : IComparable<MinPackage>
+        {
+            public const string IdKey = "id";
+            public const string VersionKey = "version";
+            public const string SourcePublishedKey = "sourcePublished";
+            public const string DeletedKey = "deleted";
+            public string Id { get; set; }
+            public SemanticVersion Version { get; set; }
+            public DateTime SourcePublished { get; set; }
+            public DateTime? Deleted { get; set; }
+            public JObject SourceJObject { get; set; }
+
+            public int CompareTo(MinPackage other)
+            {
+                return this.SourcePublished.CompareTo(other.SourcePublished);
+            }
+
+            public static MinPackage GetMinPackage(JObject jObject)
+            {
+                var minPackage = new MinPackage();
+                minPackage.Id = jObject[IdKey].ToString();
+                minPackage.Version = new SemanticVersion(jObject[VersionKey].ToString());
+                var sourcePublished = jObject[SourcePublishedKey].Value<DateTime>();
+                minPackage.SourcePublished = new DateTime(sourcePublished.Ticks, DateTimeKind.Utc);
+
+                var deletedToken = jObject[DeletedKey];
+                if (deletedToken != null)
+                {
+                    var deleted = jObject[DeletedKey].Value<DateTime>();
+                    minPackage.Deleted = new DateTime(deleted.Ticks, DateTimeKind.Utc);
+                }
+
+                minPackage.SourceJObject = jObject;
+                return minPackage;
+            }
+
+            public override string ToString()
+            {
+                const string stringFormat = "{0}/{1}/{2}/{3}";
+                const string nullString = "NULL";
+                return String.Format(stringFormat, Id, Version.ToString(), SourcePublished.ToString("O"), Deleted.HasValue ? Deleted.Value.ToString("O") : nullString);
+            }
+        }
         public const string PackageIndexKey = "packageIndex";
         private const string CountDateTimeRangeFormat = "Packages/$count/?$filter=Published ge DateTime'{0}' and Published lt DateTime'{1}'";
 
@@ -74,7 +76,7 @@ namespace NuGet.Services.Work.Jobs
             return Int32.Parse(responseString);
         }
 
-        public static List<int> GetDeletedPackageIndices(Uri sourceUri, List<MinPackage> destinationPackages, int startIndex, int endIndex, DateTime dateTime)
+        private static List<int> GetDeletedPackageIndices(Uri sourceUri, List<MinPackage> destinationPackages, int startIndex, int endIndex, DateTime dateTime)
         {
             var serviceContext = new DataServices.DataServiceContext(sourceUri)
             {
@@ -119,7 +121,7 @@ namespace NuGet.Services.Work.Jobs
             return deletedPackageIndices;
         }
 
-        public static List<int> GetDeletedPackageIndices(Uri sourceUri, List<MinPackage> destinationPackages, int startIndex, int endIndex)
+        private static List<int> GetDeletedPackageIndices(Uri sourceUri, List<MinPackage> destinationPackages, int startIndex, int endIndex)
         {
             // Set 'start' as the SourcePublished of destination package at 'startIndex'
             var start = destinationPackages[startIndex].SourcePublished;
@@ -184,7 +186,7 @@ namespace NuGet.Services.Work.Jobs
             return left;
         }
 
-        public static List<MinPackage> GetSortedMinPackages(JObject mirrorJson, bool ignoreDeleted)
+        private static List<MinPackage> GetSortedMinPackages(JObject mirrorJson, bool ignoreDeleted)
         {
             var list = new List<MinPackage>();
             var arrayObject = mirrorJson[PackageIndexKey];
@@ -211,7 +213,7 @@ namespace NuGet.Services.Work.Jobs
             return list;
         }
 
-        public static List<MinPackage> GetDeletedPackages(Uri sourceUri, JObject mirrorJson)
+        private static List<MinPackage> GetDeletedPackages(Uri sourceUri, JObject mirrorJson)
         {
             var destinationPackages = GetSortedMinPackages(mirrorJson, ignoreDeleted: true);
 
@@ -240,18 +242,21 @@ namespace NuGet.Services.Work.Jobs
                 await connection.OpenAsync();
                 foreach(var minPackage in minPackagesToBeDeleted)
                 {
-                    var dynamicPackages = await PackageDeletor.GetDeletePackages(account, connection, minPackage.Id, minPackage.Version.ToString(), allVersions: false);
+                    var dynamicPackages = await PackageDeletor.GetDeletePackages(connection, minPackage.Id, minPackage.Version.ToString(), allVersions: false);
                     foreach (var dynamicPackage in dynamicPackages)
                     {
                         NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.DeletingPackage(minPackage.ToString());
                         await PackageDeletor.DeletePackage(dynamicPackage, connection, account);
-                        NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.DeletedPackage(minPackage.ToString(), DateTime.UtcNow.ToString("O"));
+                        var deletedTime = DateTime.UtcNow.ToString("O");
+                        minPackage.SourceJObject[MinPackage.DeletedKey] = deletedTime;
+                        NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.DeletedPackage(minPackage.ToString(), deletedTime);
                     }
                 }
             }
         }
     }
 
+    [EventSource(Name = "Outercurve-NuGet-Services-NuGetV2RepositoryMirrorPackageDeletor")]
     public class NuGetV2RepositoryMirrorPackageDeletorEventSource : EventSource
     {
         public static readonly NuGetV2RepositoryMirrorPackageDeletorEventSource Log = new NuGetV2RepositoryMirrorPackageDeletorEventSource();

@@ -69,6 +69,7 @@ namespace NuGet.Services.Work.Jobs
         public NuGetV2RepositoryMirrorerJob(ConfigurationHub config)
         {
             Config = config;
+            AddEventSource(NuGetV2RepositoryMirrorPackageDeletorEventSource.Log);
         }
 
         protected async internal override Task Execute()
@@ -114,12 +115,26 @@ namespace NuGet.Services.Work.Jobs
             };
 
             var mirrorJson = await GetJObject(MirrorBlobContainer, MirrorBlobName);
+            Exception caughtException = null;
 
             if (ExecuteDeletes)
             {
-                AddEventSource(NuGetV2RepositoryMirrorPackageDeletorEventSource.Log);
                 // Packages are in Legacy account. PackageDatabase is the InitialCatalog in the legacy account
-                await NuGetV2RepositoryMirrorPackageDeletor.DeletePackages(sourceUri, mirrorJson, Config.Storage.Legacy, Config.Sql.Legacy);
+                var account = Config.Storage.Legacy;
+                var cstr = Config.Sql.Legacy;
+                if(cstr == null)
+                {
+                    throw new ArgumentNullException("Legacy sql cannot be null");
+                }
+                try
+                {
+                    await NuGetV2RepositoryMirrorPackageDeletor.DeletePackages(sourceUri, mirrorJson, account, cstr);
+                }
+                catch (Exception ex)
+                {
+                    caughtException = ex;
+                }
+                await SetJObject(MirrorBlobContainer, MirrorBlobName, mirrorJson);
                 return;
             }
 
@@ -130,7 +145,6 @@ namespace NuGet.Services.Work.Jobs
             int retries = 0;
             int count = 0;
             int skipIndex = 0;
-            Exception caughtException = null;
 
             //
             //  POSSIBLE ACTIONS when an error is encountered

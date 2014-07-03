@@ -64,7 +64,10 @@ namespace NuGet.Services.Work.Helpers
 
             await DeletePackageData(package, connection);
 
-            await DeletePackageBlob(package, account);
+            if (account != null)
+            {
+                await DeletePackageBlob(package, account);
+            }
         }
         public static async Task DeleteRegistration(SqlConnection conn, string id)
         {
@@ -107,9 +110,9 @@ namespace NuGet.Services.Work.Helpers
                     Id = id
                 });
         }
-        private static async Task DeletePackageData(dynamic package, SqlConnection connection)
+        private static Task DeletePackageData(dynamic package, SqlConnection connection)
         {
-            var result = await connection.QueryAsync<int>(@"
+            var result = connection.Query(@"
 		    BEGIN TRAN
 		
 		    DECLARE @actions TABLE(
@@ -189,9 +192,15 @@ namespace NuGet.Services.Work.Helpers
                     {
                         key = (int)package.Key
                     });
+
+            return Task.FromResult<object>(null);
         }
         private static async Task DeletePackageBlob(dynamic package, CloudStorageAccount account)
         {
+            if (account == null)
+            {
+                throw new ArgumentNullException("Storage Account cannot be null");
+            }
             string id = ((string)package.Id).ToLowerInvariant();
             string version = ((string)package.Version).ToLowerInvariant();
 
@@ -207,7 +216,7 @@ namespace NuGet.Services.Work.Helpers
                 AccessCondition.GenerateEmptyCondition(),
                 new BlobRequestOptions(), new OperationContext());
         }
-        public static async Task<IEnumerable<dynamic>> GetDeletePackages(CloudStorageAccount account, SqlConnection conn, string id, string version, bool allVersions)
+        public static async Task<IEnumerable<dynamic>> GetDeletePackages(SqlConnection conn, string id, string version, bool allVersions)
         {
             // Parse the version
             if (!String.IsNullOrWhiteSpace(version))
