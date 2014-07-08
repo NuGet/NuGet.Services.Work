@@ -264,6 +264,7 @@
     <Compile Include="Helpers\DapperExtensions.cs" />
     <Compile Include="Helpers\DateTimeOffsetExtensions.cs" />
     <Compile Include="Helpers\EventSourceInstanceManager.cs" />
+    <Compile Include="Helpers\PackageDeletor.cs" />
     <Compile Include="Helpers\SemanticVersionHelper.cs" />
     <Compile Include="Helpers\MetadataEventStreamSQLQueries.cs" />
     <Compile Include="Helpers\StorageHelpers.cs" />
@@ -286,6 +287,7 @@
     <Compile Include="Jobs\Db\CleanDatabasesJob.cs" />
     <Compile Include="Jobs\Db\MaintainDatabaseIndexesJob.cs" />
     <Compile Include="Jobs\MetadataEventStreamJob.cs" />
+    <Compile Include="Jobs\NuGetV2RepositoryMirrorDeletor.cs" />
     <Compile Include="Jobs\NuGetV2RepositoryMirrorerJob.cs" />
     <Compile Include="Jobs\Stats\AggregateStatisticsJob.cs" />
     <Compile Include="Jobs\Storage\ArchivePackagesJob.cs" />
