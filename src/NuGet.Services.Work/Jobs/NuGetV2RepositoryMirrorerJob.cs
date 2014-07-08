@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.Services.Client;
+using System.Data.SqlClient;
 using System.Diagnostics.Tracing;
 using System.IO;
 using System.Linq;
@@ -93,6 +94,14 @@ namespace NuGet.Services.Work.Jobs
                 throw new ArgumentException("ApiKey cannot be null or empty");
             }
 
+            // Packages are in Legacy account. PackageDatabase is the InitialCatalog in the legacy account
+            var account = Config.Storage.Legacy;
+            var cstr = Config.Sql.Legacy;
+            if (cstr == null)
+            {
+                throw new ArgumentNullException("Legacy sql cannot be null");
+            }
+
             // Arrange or set defaults for parameters that are not provided
             UserAgent = String.Format("{0}v2FeedMirrorer", sourceV2FeedUri.DnsSafeHost);
             var timeOutPerPush = TimeSpan.FromMinutes(PushTimeOutInMinutes);
@@ -115,17 +124,15 @@ namespace NuGet.Services.Work.Jobs
             };
 
             var mirrorJson = await GetJObject(MirrorBlobContainer, MirrorBlobName);
+            if (!IsMirrorJsonValid(mirrorJson))
+            {
+                throw new InvalidOperationException("mirrorJson is not valid. Either packageIndex array is not present. Or, the elements are not sorted by SourcePublishedDate");
+            }
+
             Exception caughtException = null;
 
             if (ExecuteDeletes)
             {
-                // Packages are in Legacy account. PackageDatabase is the InitialCatalog in the legacy account
-                var account = Config.Storage.Legacy;
-                var cstr = Config.Sql.Legacy;
-                if(cstr == null)
-                {
-                    throw new ArgumentNullException("Legacy sql cannot be null");
-                }
                 try
                 {
                     await NuGetV2RepositoryMirrorPackageDeletor.DeletePackages(sourceUri, mirrorJson, account, cstr);
@@ -188,7 +195,7 @@ namespace NuGet.Services.Work.Jobs
                     // Query for packages published since oldLastPublished
                     PackageServer destinationServer = new PackageServer(DestinationUri, UserAgent);
 
-                    var lastMirroredPackage = QueryAndMirrorBatch(serviceContext, destinationServer, oldLastPublished, ApiKey, timeOutPerPush.Milliseconds, mirrorJson, ref retries, ref count, ref skipIndex);
+                    var lastMirroredPackage = QueryAndMirrorBatch(serviceContext, destinationServer, oldLastPublished, ApiKey, timeOutPerPush.Milliseconds, mirrorJson, ref retries, ref count, ref skipIndex, cstr, account);
                     if (lastMirroredPackage != null)
                     {
                         if (!lastMirroredPackage.Published.HasValue)
@@ -339,7 +346,7 @@ namespace NuGet.Services.Work.Jobs
             }
         }
 
-        private void ThrowDestinationExceptionIfNeeded(DestinationException ex, ref int retries, IPackage package)
+        private async Task ThrowDestinationExceptionIfNeeded(DestinationException ex, IPackage package, JObject mirrorJson, SqlConnectionStringBuilder cstr, CloudStorageAccount account)
         {
             var inner = ex.InnerException;
             HttpStatusCode? code = (inner != null && inner is InvalidOperationException) ? GetHttpStatusCodeFrom(inner.InnerException) : GetHttpStatusCodeFrom(inner);
@@ -353,6 +360,22 @@ namespace NuGet.Services.Work.Jobs
             {
                 // '409 Conflict' from Destination- Package already exists in destination. Don't rethrow
                 case HttpStatusCode.Conflict:
+                    var sourceJObject = GetJObject(mirrorJson, package.Id, package.Version.ToString());
+                    if (sourceJObject == null)
+                    {
+                        throw new InvalidOperationException("Package" + package.Id + "//" + package.Version.ToString() + "is already mirrored, but, not present in mirror.json. WRONG!");
+                    }
+                    var oldSourcePublished = sourceJObject[SourcePublishedKey].Value<DateTime>();
+                    var newSourcePublished = new DateTime(package.Published.Value.Ticks, DateTimeKind.Utc);
+                    if (!newSourcePublished.Equals(oldSourcePublished))
+                    {
+                        // This package while already mirrored to the destination, has been deleted from the source and published again to the source
+                        // Hence, the different SourcePublished Date
+                        // Need to delete the package
+                        Log.DeletingOldRevision(package.ToString(), oldSourcePublished.ToString(DateTimeFormatSpecifier), newSourcePublished.ToString(DateTimeFormatSpecifier));
+                        await NuGetV2RepositoryMirrorPackageDeletor.DeletePackage(cstr, account, sourceJObject, package.Id, package.Version.ToString());
+                        throw ex;
+                    }
                     Log.PackageAlreadyExists(package.ToString());
                     break;
 
@@ -362,7 +385,49 @@ namespace NuGet.Services.Work.Jobs
             }
         }
 
-        private JObject GetNewPackage(IPackage package)
+        private static int CompareToSourcePublished(JObject leftJObject, JObject rightJObject)
+        {
+            var ticks = rightJObject[SourcePublishedKey].Value<DateTime>().Ticks;
+            return CompareToSourcePublished(leftJObject, ticks);
+        }
+
+        private static int CompareToSourcePublished(JObject jObject, long sourcePublishedTicks)
+        {
+            var sourcePublishedUtc = new DateTime(sourcePublishedTicks, DateTimeKind.Utc);
+            var sourceJObjectSourcePublished = jObject[SourcePublishedKey].Value<DateTime>();
+            return sourceJObjectSourcePublished.CompareTo(sourcePublishedUtc);
+        }
+        private static JObject GetJObject(JObject mirrorJson, string id, string version)
+        {
+            var packageIndex = mirrorJson[PackageIndexKey];
+            return (JObject)packageIndex.Where(s => String.Equals(s[IdKey].ToString(), id, StringComparison.OrdinalIgnoreCase) && String.Equals(s[VersionKey].ToString(), version, StringComparison.OrdinalIgnoreCase)).SingleOrDefault();
+        }
+
+        private static bool IsMirrorJsonValid(JObject mirrorJson)
+        {
+            var packageIndex = mirrorJson[PackageIndexKey] as JArray;
+            if (packageIndex == null)
+            {
+                return false;
+            }
+
+            if (packageIndex.Count > 1)
+            {
+                for (int i = 1; i < packageIndex.Count; i++)
+                {
+                    var leftObject = packageIndex[i - 1] as JObject;
+                    var rightObject = packageIndex[i] as JObject;
+                    if (leftObject == null || rightObject == null || CompareToSourcePublished(leftObject, rightObject) > 0)
+                    {
+                        // If the leftObject or rightObject is null or if SourcePublished of leftObject is greater than rightObject, mirrorJson is not valid
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        private static JObject GetNewPackage(IPackage package)
         {
             JObject jObject = new JObject();
             var utcdt = new DateTime(package.Published.Value.Ticks, DateTimeKind.Utc);
@@ -373,7 +438,7 @@ namespace NuGet.Services.Work.Jobs
             return jObject;
         }
 
-        private void AddNewPackage(JObject mirrorJson, IPackage package)
+        private static void AddNewPackage(JObject mirrorJson, IPackage package)
         {
             // TODO: Check for prior existence of the package Id, version and delete the old one if SourceLastPublished is not the same
             // This logic has to be in the 409 Conflict path
@@ -381,6 +446,14 @@ namespace NuGet.Services.Work.Jobs
             if (array == null)
             {
                 throw new InvalidOperationException("There is no array of 'packageIndex' in mirror json");
+            }
+            var lastItem = array.Count > 0 ? array[array.Count - 1] as JObject : null;
+            if(lastItem != null)
+            {
+                if (CompareToSourcePublished(lastItem, package.Published.Value.Ticks) > 0)
+                {
+                    throw new InvalidOperationException("Last package added has a greater SourcePublished Date than the new package being added");
+                }
             }
             array.Add(GetNewPackage(package));
         }
@@ -391,7 +464,7 @@ namespace NuGet.Services.Work.Jobs
         /// </summary>
         /// <returns>Returns lastMirroredPackage or null</returns>
         private IPackage QueryAndMirrorBatch(DataServices.DataServiceContext serviceContext, PackageServer destinationServer, DateTime lastPublished,
-        string apiKey, int timeOut, JObject mirrorJson, ref int retries, ref int count, ref int skipIndex)
+        string apiKey, int timeOut, JObject mirrorJson, ref int retries, ref int count, ref int skipIndex, SqlConnectionStringBuilder cstr, CloudStorageAccount account)
         {
             var newPackages = GetNewPackagesToMirror(serviceContext, lastPublished);
 
@@ -422,6 +495,7 @@ namespace NuGet.Services.Work.Jobs
                         {
                             currentPackage = package;
                             MirrorPackage(package, destinationServer, tempPackageManager, tempLocalRepo, apiKey, timeOut);
+                            AddNewPackage(mirrorJson, package);
                             Log.PushedToDestination(++count);
                         }
                         catch (SourceException ex)
@@ -430,10 +504,8 @@ namespace NuGet.Services.Work.Jobs
                         }
                         catch (DestinationException ex)
                         {
-                            ThrowDestinationExceptionIfNeeded(ex, ref retries, package);
+                            ThrowDestinationExceptionIfNeeded(ex, package, mirrorJson, cstr, account).Wait();
                         }
-
-                        AddNewPackage(mirrorJson, package);
                         lastMirroredPackage = package;
                         retries = 0;
                         ++skipIndex;
@@ -457,14 +529,14 @@ namespace NuGet.Services.Work.Jobs
             return lastMirroredPackage;
         }
 
-        private async Task<JObject> GetJObject(CloudBlobContainer container, string blobName)
+        private static async Task<JObject> GetJObject(CloudBlobContainer container, string blobName)
         {
             CloudBlockBlob blob = container.GetBlockBlobReference(blobName);
             string json = await blob.DownloadTextAsync();
             return JObject.Parse(json);
         }
 
-        private async Task SetJObject(CloudBlobContainer container, string blobName, JObject jObject)
+        private static async Task SetJObject(CloudBlobContainer container, string blobName, JObject jObject)
         {
             CloudBlockBlob blob = container.GetBlockBlobReference(blobName);
             blob.Properties.ContentType = ContentTypeJson;
@@ -587,5 +659,11 @@ So, packages will be mirrored from {3} to {4} whose published Date is greater th
             Level=EventLevel.Informational,
             Message="GENERAL LOG: {0}")]
         public void LogMessage(string message) { WriteEvent(18, message); }
+
+        [Event(
+            eventId:19,
+            Level=EventLevel.Informational,
+            Message="Package {0} already exists in the mirror, but with an older source published date {1}. Current Source Published Date is {2}. This implies that the package was deleted and added back again. So, deleting the package in the mirror")]
+        public void DeletingOldRevision(string package, string oldSourcePublished, string newSourcePublished) { WriteEvent(19, package, oldSourcePublished, newSourcePublished); }
     }
 }

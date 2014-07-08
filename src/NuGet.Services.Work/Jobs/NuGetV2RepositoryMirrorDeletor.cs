@@ -233,6 +233,15 @@ namespace NuGet.Services.Work.Jobs
             return list;
         }
 
+        public static async Task DeletePackage(SqlConnectionStringBuilder cstr, CloudStorageAccount account, JObject sourceJObject, string id, string version)
+        {
+            using (var connection = new SqlConnection(cstr.ConnectionString))
+            {
+                await connection.OpenAsync();
+                await DeletePackage(connection, account, sourceJObject, id, version);
+            }
+        }
+
         public static async Task DeletePackage(SqlConnection connection, CloudStorageAccount account, JObject sourceJObject, string id, string version)
         {
             var dynamicPackages = await PackageDeletor.GetDeletePackages(connection, id, version, allVersions: false);
