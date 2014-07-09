@@ -14,16 +14,18 @@ namespace NuGet.Services.Work.Jobs.Models
             Version = version;
             Hash = hash;
         }
-        public PackageRef(string id, string version, string hash, DateTime lastEdited)
+        public PackageRef(string id, string version, string hash, DateTime lastEdited) : this(id, version, hash)
         {
-            Id = id;
-            Version = version;
-            Hash = hash;
             LastEdited = lastEdited;
+        }
+        public PackageRef(string id, string version, string hash, DateTime lastEdited, DateTime published) : this(id, version, hash, lastEdited)
+        {
+            Published = published;
         }
         public string Id { get; set; }
         public string Version { get; set; }
         public string Hash { get; set; }
         public DateTime? LastEdited { get; set; }
+        public DateTime? Published { get; set; }
     }
 }

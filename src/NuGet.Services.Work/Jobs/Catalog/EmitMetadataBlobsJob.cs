@@ -47,12 +47,12 @@ namespace NuGet.Services.Work.Jobs
 
             //if (content == null)
             //{
-            //    since = DateTime.MinValue;
+            //    since = DateTime.MinValue.ToUniversalTime();
             //}
             //else
             //{
             //    JToken cursorDoc = JsonLD.Util.JSONUtils.FromInputStream(content.GetContentStream());
-            //    since = DateTime.Parse((string)cursorDoc["http://nuget.org/collector/resolver#cursor"]["@value"]);
+            //    since = cursorDoc["http://nuget.org/collector/resolver#cursor"]["@value"].ToObject<DateTime>();
             //}
 
             //Uri requestUri = new Uri(CatalogUri);
@@ -73,11 +73,9 @@ namespace NuGet.Services.Work.Jobs
         private EmitResolverBlobsEventSource() { }
 
         [Event(
-        eventId: 1,
-        Level = EventLevel.Informational,
-        Message = "Emitted metadata blob '{0}'"
-        )
-        ]
+            eventId: 1,
+            Level = EventLevel.Informational,
+            Message = "Emitted metadata blob '{0}'")]
         public void EmitBlob(string blobname) { WriteEvent(1, blobname); }
     }
 }
