@@ -9,6 +9,7 @@ using Autofac;
 using Moq;
 using NuGet.Services.TestCommon;
 using NuGet.Services.Work.Models;
+using NuGet.Services.Work.Monitoring;
 using Xunit;
 
 namespace NuGet.Services.Work
@@ -124,9 +125,9 @@ namespace NuGet.Services.Work
 
         public class TestJob : JobHandlerBase
         {
-            public override IEnumerable<EventSource> GetEventSources()
+            public override IEnumerable<EventSourceReference> GetEventSources()
             {
-                return Enumerable.Empty<EventSource>();
+                return Enumerable.Empty<EventSourceReference>();
             }
 
             protected internal override Task<InvocationResult> Invoke()
@@ -147,9 +148,9 @@ namespace NuGet.Services.Work
 
         public class TestAsyncJob : JobHandlerBase, IAsyncJob
         {
-            public override IEnumerable<EventSource> GetEventSources()
+            public override IEnumerable<EventSourceReference> GetEventSources()
             {
-                return Enumerable.Empty<EventSource>();
+                return Enumerable.Empty<EventSourceReference>();
             }
 
             public Task<InvocationResult> InvokeContinuation(InvocationContext context)
@@ -170,9 +171,9 @@ namespace NuGet.Services.Work
                 GetContextSlot().Value = service;
             }
 
-            public override IEnumerable<EventSource> GetEventSources()
+            public override IEnumerable<EventSourceReference> GetEventSources()
             {
-                return Enumerable.Empty<EventSource>();
+                return Enumerable.Empty<EventSourceReference>();
             }
 
             protected internal override Task<InvocationResult> Invoke()

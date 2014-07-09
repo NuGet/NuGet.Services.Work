@@ -174,9 +174,9 @@
     <Reference Include="NuGet.Indexing">
       <HintPath>..\..\packages\NuGet.Indexing.3.0.29-r-master\lib\net45\NuGet.Indexing.dll</HintPath>
     </Reference>
-    <Reference Include="NuGet.Services.Metadata.Catalog, Version=3.0.27.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="NuGet.Services.Metadata.Catalog, Version=3.0.39.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\packages\NuGet.Services.Metadata.Catalog.3.0.27-r-master\lib\net45\NuGet.Services.Metadata.Catalog.dll</HintPath>
+      <HintPath>..\..\packages\NuGet.Services.Metadata.Catalog.3.0.39-r-master\lib\net45\NuGet.Services.Metadata.Catalog.dll</HintPath>
     </Reference>
     <Reference Include="NuGet.Services.Platform, Version=3.0.16.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
@@ -283,9 +283,10 @@
     <Compile Include="Infrastructure\UnknownJobException.cs" />
     <Compile Include="JobComponentsModule.cs" />
     <Compile Include="JobFailureException.cs" />
+    <Compile Include="Jobs\Catalog\AzureStorageChecksumRecords.cs" />
+    <Compile Include="Jobs\Catalog\UpdateCatalogJob.cs" />
     <Compile Include="Jobs\Db\CleanDatabasesJob.cs" />
     <Compile Include="Jobs\Db\MaintainDatabaseIndexesJob.cs" />
-    <Compile Include="Jobs\MetadataEventStreamJob.cs" />
     <Compile Include="Jobs\NuGetV2RepositoryMirrorerJob.cs" />
     <Compile Include="Jobs\Stats\AggregateStatisticsJob.cs" />
     <Compile Include="Jobs\Storage\BackupPackageBlobsJob.cs" />
@@ -317,8 +318,10 @@
     <Compile Include="Jobs\UpdateLicenseReportsJob.cs" />
     <Compile Include="Jobs\Search\UpdateSearchIndexJob.cs" />
     <Compile Include="LocalWorkService.cs" />
-    <Compile Include="Metadata\EmitMetadataBlobs.cs" />
+    <Compile Include="Jobs\Catalog\EmitMetadataBlobsJob.cs" />
+    <Compile Include="Monitoring\EventSourceReference.cs" />
     <Compile Include="Monitoring\EventSourceWriter.cs" />
+    <Compile Include="Monitoring\TracingHttpHandler.cs" />
     <Compile Include="ServiceReferences\DACWebServiceReference.cs" />
     <Compile Include="Worker.cs" />
     <Compile Include="WorkServiceStatus.cs" />
@@ -376,6 +379,12 @@
     <EmbeddedResource Include="Jobs\Scripts\MetadataEventStream_CreateLogTables.sql" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="content\d3.v3.min.js" />
+    <Content Include="content\further.js" />
+    <Content Include="content\Json2Html.js" />
+    <Content Include="content\Json2HtmlStyle.css" />
+    <Content Include="content\jsonld.js" />
+    <Content Include="content\Promise.js" />
     <Content Include="Jobs\Scripts\NuGetDownloadsAlterTable.sql" />
     <Content Include="Jobs\Scripts\NuGetDownloadsAlterTable_2.sql" />
     <Content Include="Jobs\Scripts\NuGetDownloadsAlterTable_3.sql" />

@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 using NuGet.Services.Work.Helpers;
+using NuGet.Services.Work.Monitoring;
 
 namespace NuGet.Services.Work
 {
@@ -13,13 +14,13 @@ namespace NuGet.Services.Work
         where TEventSource : EventSource
     {
         private TEventSource _log = EventSourceInstanceManager.Get<TEventSource>();
-        private IList<EventSource> _additionalSources = new List<EventSource>();
+        private IList<EventSourceReference> _additionalSources = new List<EventSourceReference>();
 
         public TEventSource Log { get { return _log; } }
 
-        public override IEnumerable<EventSource> GetEventSources()
+        public override IEnumerable<EventSourceReference> GetEventSources()
         {
-            yield return Log;
+            yield return new EventSourceReference(Log, EventLevel.LogAlways);
             foreach (var source in _additionalSources)
             {
                 yield return source;
@@ -28,7 +29,12 @@ namespace NuGet.Services.Work
 
         protected void AddEventSource(EventSource log)
         {
-            _additionalSources.Add(log);
+            AddEventSource(log, EventLevel.LogAlways);
+        }
+
+        protected void AddEventSource(EventSource log, EventLevel level)
+        {
+            _additionalSources.Add(new EventSourceReference(log, level));
         }
     }
 
