@@ -69,8 +69,10 @@ namespace NuGet.Services.Work.JobHost
             Console.WriteLine(message);
             Console.WriteLine(new String('-', message.Length));
 
+            Stopwatch sw = new Stopwatch();
             try
             {
+                sw.Start();
                 var observable = service.RunJob(args.Job, args.Payload);
                 observable
                     .Subscribe(
@@ -78,6 +80,7 @@ namespace NuGet.Services.Work.JobHost
                         ex => tcs.SetException(ex),
                         () => tcs.SetResult(null));
                 await tcs.Task;
+                sw.Stop();
             }
             catch (AggregateException aex)
             {
@@ -88,7 +91,7 @@ namespace NuGet.Services.Work.JobHost
                 Console.Error.WriteLine(ex.ToString());
             }
 
-            message = String.Format("Completed invocation of job {0}.", args.Job);
+            message = String.Format("Completed invocation of job {0} in {1}.", args.Job, sw.Elapsed);
             Console.WriteLine(new String('-', message.Length));
             Console.WriteLine(message);
         }

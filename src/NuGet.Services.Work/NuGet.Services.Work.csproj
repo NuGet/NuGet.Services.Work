@@ -174,9 +174,9 @@
     <Reference Include="NuGet.Indexing">
       <HintPath>..\..\packages\NuGet.Indexing.3.0.29-r-master\lib\net45\NuGet.Indexing.dll</HintPath>
     </Reference>
-    <Reference Include="NuGet.Services.Metadata.Catalog, Version=3.0.39.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="NuGet.Services.Metadata.Catalog, Version=3.0.52.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\packages\NuGet.Services.Metadata.Catalog.3.0.39-r-master\lib\net45\NuGet.Services.Metadata.Catalog.dll</HintPath>
+      <HintPath>..\..\packages\NuGet.Services.Metadata.Catalog.3.0.52-r-master\lib\net45\NuGet.Services.Metadata.Catalog.dll</HintPath>
     </Reference>
     <Reference Include="NuGet.Services.Platform, Version=3.0.16.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>

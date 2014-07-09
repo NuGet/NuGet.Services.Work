@@ -49,6 +49,10 @@ namespace NuGet.Services.Work.Jobs.Catalog
         protected override async Task SaveJson(JObject obj)
         {
             await _checksumBlob.Container.CreateIfNotExistsAsync();
+            
+            _checksumBlob.Properties.ContentType = "application/json";
+            _checksumBlob.Properties.CacheControl = "no-store";
+
             await _checksumBlob.UploadTextAsync(obj.ToString(Formatting.None));
         }
     }
