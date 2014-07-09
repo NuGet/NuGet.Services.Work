@@ -378,6 +378,19 @@
   <ItemGroup>
     <EmbeddedResource Include="Jobs\Scripts\MetadataEventStream_CreateLogTables.sql" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="Jobs\Scripts\NuGetDownloadsAlterTable.sql" />
+    <Content Include="Jobs\Scripts\NuGetDownloadsAlterTable_2.sql" />
+    <Content Include="Jobs\Scripts\NuGetDownloadsAlterTable_3.sql" />
+    <Content Include="Jobs\Scripts\NuGetDownloadsCreateTables.sql" />
+    <Content Include="Jobs\Scripts\NuGetDownloadsDropTables.sql" />
+    <Content Include="Jobs\Scripts\NuGetDownloadsFuncs_UserAgent.sql" />
+    <Content Include="Jobs\Scripts\NuGetDownloadsProcs_AddDownloadFact.sql" />
+    <Content Include="Jobs\Scripts\NuGetDownloadsProcs_ConfirmPackageExported.sql" />
+    <Content Include="Jobs\Scripts\NuGetDownloadsProcs_GetLastOriginalKey.sql" />
+    <Content Include="Jobs\Scripts\NuGetDownloadsProcs_GetPackagesForExport.sql" />
+    <Content Include="Jobs\Scripts\PopulateDimensions.sql" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="..\..\packages\Microsoft.Bcl.Build.1.0.13\tools\Microsoft.Bcl.Build.targets" Condition="Exists('..\..\packages\Microsoft.Bcl.Build.1.0.13\tools\Microsoft.Bcl.Build.targets')" />
   <Target Name="EnsureBclBuildImported" BeforeTargets="BeforeBuild" Condition="'$(BclBuildImported)' == ''">
