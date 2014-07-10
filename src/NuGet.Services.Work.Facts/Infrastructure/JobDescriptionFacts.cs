@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using NuGet.Services.Work.Monitoring;
 using Xunit;
 
 namespace NuGet.Services.Work
@@ -32,7 +33,7 @@ namespace NuGet.Services.Work
             [Job("ATestJob")]
             public class ATestJorb : JobHandlerBase
             {
-                public override IEnumerable<System.Diagnostics.Tracing.EventSource> GetEventSources()
+                public override IEnumerable<EventSourceReference> GetEventSources()
                 {
                     throw new NotImplementedException();
                 }
@@ -45,7 +46,7 @@ namespace NuGet.Services.Work
 
             public class ATestJerb : JobHandlerBase
             {
-                public override IEnumerable<System.Diagnostics.Tracing.EventSource> GetEventSources()
+                public override IEnumerable<EventSourceReference> GetEventSources()
                 {
                     throw new NotImplementedException();
                 }
@@ -58,7 +59,7 @@ namespace NuGet.Services.Work
 
             public class ATestJob : JobHandlerBase
             {
-                public override IEnumerable<System.Diagnostics.Tracing.EventSource> GetEventSources()
+                public override IEnumerable<EventSourceReference> GetEventSources()
                 {
                     throw new NotImplementedException();
                 }

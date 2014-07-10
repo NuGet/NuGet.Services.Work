@@ -190,7 +190,6 @@
     <Compile Include="Helpers\SqlConnectionStringBuilderExtensionsFacts.cs" />
     <Compile Include="Infrastructure\JobRunnerFacts.cs" />
     <Compile Include="InvocationPayloadSerializerFacts.cs" />
-    <Compile Include="Jobs\MetadataEventStreamJobFacts.cs" />
     <Compile Include="Models\DatabaseBackupMetadataFacts.cs" />
     <Compile Include="Infrastructure\JobDescriptionFacts.cs" />
     <Compile Include="Infrastructure\JobDispatcherFacts.cs" />
