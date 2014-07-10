@@ -23,7 +23,7 @@ namespace NuGet.Services.Work.Jobs
             public const string VersionKey = "version";
             public const string SourceCreatedKey = "sourceCreated";
             public string Id { get; set; }
-            public SemanticVersion Version { get; set; }
+            public SemanticVersion SemanticVersion { get; set; }
             public DateTime SourceCreated { get; set; }
             public JObject SourceJObject { get; set; }
 
@@ -36,7 +36,7 @@ namespace NuGet.Services.Work.Jobs
             {
                 var minPackage = new MinPackage();
                 minPackage.Id = jObject[IdKey].ToString();
-                minPackage.Version = new SemanticVersion(jObject[VersionKey].ToString());
+                minPackage.SemanticVersion = new SemanticVersion(jObject[VersionKey].ToString());
                 var sourceCreated = jObject[SourceCreatedKey].Value<DateTime>();
                 minPackage.SourceCreated = new DateTime(sourceCreated.Ticks, DateTimeKind.Utc);
 
@@ -47,7 +47,7 @@ namespace NuGet.Services.Work.Jobs
             public override string ToString()
             {
                 const string stringFormat = "{0}/{1}/{2}";
-                return String.Format(stringFormat, Id, Version.ToString(), SourceCreated.ToString("O"));
+                return String.Format(stringFormat, Id, SemanticVersion.ToString(), SourceCreated.ToString("O"));
             }
         }
         public const string PackageIndexKey = "packageIndex";
@@ -74,14 +74,14 @@ namespace NuGet.Services.Work.Jobs
                 MergeOption = DataServices.MergeOption.OverwriteChanges,
                 IgnoreMissingProperties = true,
             };
-            var packagesQuery = serviceContext.CreateQuery<DataServicePackage>("Packages");
+            var packagesQuery = serviceContext.CreateQuery<DataServicePackageWithCreated>("Packages");
             var queryOptionValue = String.Format("Created eq DateTime'{0}'", dateTime.ToString("o"));
             packagesQuery = packagesQuery.AddQueryOption("$orderby", "Id");
             packagesQuery = packagesQuery.AddQueryOption("$orderby", "Version");
             packagesQuery = packagesQuery.AddQueryOption("$filter", queryOptionValue);
 
             var skipIndex = 0;
-            var sourcePackages = new List<DataServicePackage>();
+            var sourcePackages = new List<DataServicePackageWithCreated>();
             do
             {
                 var list = packagesQuery.Skip(skipIndex).ToList();
@@ -100,7 +100,7 @@ namespace NuGet.Services.Work.Jobs
             for(int i = startIndex; i < endIndex; i++)
             {
                 var destPackage = destinationPackages[i];
-                var destPackageInSource = sourcePackages.Where(s => String.Equals(s.Id, destPackage.Id) && s.Version.Equals(destPackage.Version)).SingleOrDefault();
+                var destPackageInSource = sourcePackages.Where(s => String.Equals(s.Id, destPackage.Id) && s.SemanticVersion.Equals(destPackage.SemanticVersion)).SingleOrDefault();
                 if(destPackageInSource == null)
                 {
                     // This destination package is not present in source
@@ -256,7 +256,7 @@ namespace NuGet.Services.Work.Jobs
                 await connection.OpenAsync();
                 foreach(var minPackage in minPackagesToBeDeleted)
                 {
-                    await DeletePackage(connection, account, minPackage.SourceJObject, minPackage.Id, minPackage.Version.ToString());
+                    await DeletePackage(connection, account, minPackage.SourceJObject, minPackage.Id, minPackage.SemanticVersion.ToString());
                 }
             }
         }

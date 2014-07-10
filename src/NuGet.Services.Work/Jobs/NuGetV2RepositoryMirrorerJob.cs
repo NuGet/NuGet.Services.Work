@@ -18,9 +18,16 @@ using DataServices = NuGetCoreRef::System.Data.Services.Client;
 
 namespace NuGet.Services.Work.Jobs
 {
-    class DataServicePackageWithCreated : DataServicePackage
+    public class DataServicePackageWithCreated : DataServicePackage
     {
         public DateTimeOffset? Created { get; set; }
+        public SemanticVersion SemanticVersion
+        {
+            get
+            {
+                return (this as IPackage).Version;
+            }
+        }
     }
     /// <summary>
     /// SourceExceptions are thrown when installing a package locally from Source fails
@@ -181,6 +188,22 @@ namespace NuGet.Services.Work.Jobs
             //      i)  Action: (C). Retry 'MaxRetries' times and Fail
             //      ii) Log every retry. Update lastMirroredPackage.Created in blob storage
             //
+            // Test Cases
+            // 1) Add a new package to the source. COVERED
+            //	  Result: The new package should be present on the destination
+            // 2) Add a package as unlisted to the source. NOT COVERED
+            //	  Result: The new package should be present on the destination as unlisted
+            // 3) Delete a package version from the source. COVERED
+            //	  Result: The package should be deleted from the destination
+            // 4) Delete a package version from the source which is the last version with the package Id. NOT COVERED
+            //	  Result: The package should be deleted from the destination. And, PackageRegistration should be deleted too as appropriate
+            // 5) Delete a package version from the source. And, add a new package with same Id and version as the deleted one. COVERED
+            //	  Result: Old package with Id and version must be deleted from the destination. And, the new package with the same Id and Version must be added
+            // 6) Mark a listed package as unlisted. NOT COVERED
+            //	  Result: The package should be unlisted in the destination too
+            // 7) Mark an unlisted package as listed. NOT COVERED
+            //	  Result: The package should be listed in the destination too
+            //
             try
             {
                 do
@@ -277,7 +300,7 @@ namespace NuGet.Services.Work.Jobs
             try
             {
                 Log.AddingPackageLocally(package.ToString(), package.Created.Value.DateTime.ToString());
-                tempPackageManager.InstallPackage(package.Id, (package as IPackage).Version, ignoreDependencies: true, allowPrereleaseVersions: true);
+                tempPackageManager.InstallPackage(package.Id, package.SemanticVersion, ignoreDependencies: true, allowPrereleaseVersions: true);
                 Log.AddedPackageLocally(package.ToString());
             }
             catch (Exception ex)
@@ -364,10 +387,10 @@ namespace NuGet.Services.Work.Jobs
             {
                 // '409 Conflict' from Destination- Package already exists in destination. Don't rethrow
                 case HttpStatusCode.Conflict:
-                    var sourceJObject = GetJObject(mirrorJson, package.Id, package.Version.ToString());
+                    var sourceJObject = GetJObject(mirrorJson, package.Id, package.SemanticVersion.ToString());
                     if (sourceJObject == null)
                     {
-                        throw new InvalidOperationException("Package" + package.Id + "//" + package.Version.ToString() + "is already mirrored, but, not present in mirror.json. WRONG!");
+                        throw new InvalidOperationException("Package" + package.Id + "//" + package.SemanticVersion.ToString() + "is already mirrored, but, not present in mirror.json. WRONG!");
                     }
                     var oldSourceCreated = sourceJObject[SourceCreatedKey].Value<DateTime>();
                     var newSourceCreated = new DateTime(package.Created.Value.Ticks, DateTimeKind.Utc);
@@ -377,7 +400,7 @@ namespace NuGet.Services.Work.Jobs
                         // Hence, the different SourceCreated Date
                         // Need to delete the package
                         Log.DeletingOldRevision(package.ToString(), oldSourceCreated.ToString(DateTimeFormatSpecifier), newSourceCreated.ToString(DateTimeFormatSpecifier));
-                        await NuGetV2RepositoryMirrorPackageDeletor.DeletePackage(cstr, account, sourceJObject, package.Id, package.Version.ToString());
+                        await NuGetV2RepositoryMirrorPackageDeletor.DeletePackage(cstr, account, sourceJObject, package.Id, package.SemanticVersion.ToString());
                         throw ex;
                     }
                     Log.PackageAlreadyExists(package.ToString());
@@ -437,7 +460,7 @@ namespace NuGet.Services.Work.Jobs
             var utcdt = new DateTime(package.Created.Value.Ticks, DateTimeKind.Utc);
             jObject.Add(SourceCreatedKey, utcdt.ToString(DateTimeFormatSpecifier));
             jObject.Add(IdKey, package.Id);
-            jObject.Add(VersionKey, package.Version.ToString());
+            jObject.Add(VersionKey, package.SemanticVersion.ToString());
             // No need to add Deleted at this point
             return jObject;
         }
