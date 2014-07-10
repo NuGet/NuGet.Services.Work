@@ -8,6 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
+using NuGet.Services.Configuration;
 using NuGet.Services.Metadata.Catalog.Collecting;
 using NuGet.Services.Metadata.Catalog.Maintenance;
 using NuGet.Services.Metadata.Catalog.Persistence;
@@ -20,22 +21,30 @@ namespace NuGet.Services.Work.Jobs.Catalog
         public static readonly int DefaultChecksumCollectorBatchSize = 2000;
         public static readonly int DefaultCatalogPageSize = 1000;
 
+        private readonly ConfigurationHub Config;
+
         public SqlConnectionStringBuilder SourceDatabase { get; set; }
         public CloudStorageAccount CatalogStorage { get; set; }
         public string CatalogPath { get; set; }
         public int? ChecksumCollectorBatchSize { get; set; }
         public int? CatalogPageSize { get; set; }
 
-        public UpdateCatalogJob()
+        public UpdateCatalogJob(ConfigurationHub config)
         {
             AddEventSource(CatalogUpdaterEventSource.Log);
             AddEventSource(ChecksumCollectorEventSource.Log, EventLevel.Informational);
+
+            Config = config;
         }
 
         protected internal override async Task Execute()
         {
             var collectorBatchSize = ChecksumCollectorBatchSize ?? DefaultChecksumCollectorBatchSize;
             var catalogPageSize = CatalogPageSize ?? DefaultCatalogPageSize;
+
+            // Load Default values
+            SourceDatabase = Config.Sql.Legacy;
+            CatalogStorage = Config.Storage.Primary;
 
             // Process:
             //  1. Load existing checksums file, if present
