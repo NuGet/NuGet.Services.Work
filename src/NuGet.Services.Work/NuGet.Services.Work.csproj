@@ -265,6 +265,7 @@
     <Compile Include="Helpers\DateTimeOffsetExtensions.cs" />
     <Compile Include="Helpers\EventSourceInstanceManager.cs" />
     <Compile Include="Helpers\PackageDeletor.cs" />
+    <Compile Include="Helpers\ArgCheck.cs" />
     <Compile Include="Helpers\SemanticVersionHelper.cs" />
     <Compile Include="Helpers\MetadataEventStreamSQLQueries.cs" />
     <Compile Include="Helpers\StorageHelpers.cs" />
@@ -321,7 +322,7 @@
     <Compile Include="Jobs\UpdateLicenseReportsJob.cs" />
     <Compile Include="Jobs\Search\UpdateSearchIndexJob.cs" />
     <Compile Include="LocalWorkService.cs" />
-    <Compile Include="Jobs\Catalog\EmitMetadataBlobsJob.cs" />
+    <Compile Include="Jobs\Catalog\EmitResolverBlobsJob.cs" />
     <Compile Include="Monitoring\EventSourceReference.cs" />
     <Compile Include="Monitoring\EventSourceWriter.cs" />
     <Compile Include="Monitoring\TracingHttpHandler.cs" />

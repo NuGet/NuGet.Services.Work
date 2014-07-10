@@ -5,6 +5,8 @@ using System.Linq;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.WindowsAzure.Storage;
+using Microsoft.WindowsAzure.Storage.Blob;
 using NuGet.Services.Work.Jobs.Models;
 
 namespace NuGet.Services.Work
@@ -45,6 +47,32 @@ namespace NuGet.Services.Work
                 id.ToLowerInvariant(),
                 version.ToLowerInvariant(),
                 WebUtility.UrlEncode(hash));
+        }
+
+        public static CloudBlobDirectory GetBlobDirectory(CloudStorageAccount account, string path)
+        {
+            var client = account.CreateCloudBlobClient();
+
+            string[] segments = path.Split('/');
+            string containerName;
+            string prefix;
+
+            if (segments.Length < 2)
+            {
+                // No "/" segments, so the path is a container and the catalog is at the root...
+                containerName = path;
+                prefix = String.Empty;
+            }
+            else
+            {
+                // Found "/" segments, but we need to get the first segment to use as the container...
+                containerName = segments[0];
+                prefix = String.Join("/", segments.Skip(1)) + "/";
+            }
+
+            var container = client.GetContainerReference(containerName);
+            var dir = container.GetDirectoryReference(prefix);
+            return dir;
         }
     }
 }
