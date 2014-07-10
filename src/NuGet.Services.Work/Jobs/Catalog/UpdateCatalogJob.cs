@@ -54,7 +54,7 @@ namespace NuGet.Services.Work.Jobs.Catalog
             //  5. Save existing checksums file
 
             // Set up helpers/contexts/etc.
-            var catalogDirectory = GetCatalogDirectory();
+            var catalogDirectory = StorageHelpers.GetBlobDirectory(CatalogStorage, CatalogPath);
             var checksums = new AzureStorageChecksumRecords(catalogDirectory.GetBlockBlobReference(AzureStorageChecksumRecords.DefaultChecksumFileName));
             var checksumCollector = new ChecksumCollector(collectorBatchSize, checksums);
             var http = CreateHttpClient();
@@ -95,32 +95,6 @@ namespace NuGet.Services.Work.Jobs.Catalog
                 Log.SavedChecksums();
             }
 
-        }
-
-        private CloudBlobDirectory GetCatalogDirectory()
-        {
-            var client = CatalogStorage.CreateCloudBlobClient();
-
-            string[] segments = CatalogPath.Split('/');
-            string containerName;
-            string prefix;
-
-            if (segments.Length < 2)
-            {
-                // No "/" segments, so the path is a container and the catalog is at the root...
-                containerName = CatalogPath;
-                prefix = String.Empty;
-            }
-            else
-            {
-                // Found "/" segments, but we need to get the first segment to use as the container...
-                containerName = segments[0];
-                prefix = String.Join("/", segments.Skip(1)) + "/";
-            }
-
-            var container = client.GetContainerReference(containerName);
-            var dir = container.GetDirectoryReference(prefix);
-            return dir;
         }
 
         private CollectorHttpClient CreateHttpClient()
