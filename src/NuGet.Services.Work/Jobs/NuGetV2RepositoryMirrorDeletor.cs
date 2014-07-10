@@ -52,6 +52,7 @@ namespace NuGet.Services.Work.Jobs
         }
         public const string PackageIndexKey = "packageIndex";
         public const string DeletedKey = "deleted";
+        public const string ListedKey = "listed";
         private const string CountDateTimeRangeFormat = "Packages/$count/?$filter=Created ge DateTime'{0}' and Created lt DateTime'{1}'&$orderby=Created";
 
         private static int GetPackagesCount(Uri v2Feed, DateTime start, DateTime end)
@@ -258,6 +259,15 @@ namespace NuGet.Services.Work.Jobs
                 {
                     await DeletePackage(connection, account, minPackage.SourceJObject, minPackage.Id, minPackage.SemanticVersion.ToString());
                 }
+            }
+        }
+
+        public static async Task SetListed(SqlConnectionStringBuilder cstr, string id, string version, bool isListed)
+        {
+            using(var connection = new SqlConnection(cstr.ConnectionString))
+            {
+                await connection.OpenAsync();
+                await PackageDeletor.SetListed(connection, id, version, isListed);
             }
         }
     }

@@ -241,5 +241,34 @@ namespace NuGet.Services.Work.Helpers
                                                                                 });
             return packages;
         }
+        public static async Task SetListed(SqlConnection conn, string id, string version, bool isListed)
+        {
+            // Parse the version
+            if (!String.IsNullOrWhiteSpace(version))
+            {
+                version = Normalize(version);
+            }
+
+            var packages = await conn.QueryAsync<dynamic>(@"
+	SELECT
+		p.[Key] AS PackageKey,
+		p.PackageRegistrationKey,
+		pr.Id,
+		p.NormalizedVersion AS Version,
+		p.Hash
+	FROM Packages p
+	INNER JOIN PackageRegistrations pr ON p.PackageRegistrationKey = pr.[Key]
+	WHERE pr.Id = @Id AND p.NormalizedVersion = @Version", new
+                                                                               {
+                                                                                   id,
+                                                                                   version
+                                                                               });
+            var package = packages.SingleOrDefault();
+
+            await conn.QueryAsync<int>(@"
+    UPDATE  Packages
+    SET     Listed = @isListed
+    WHERE   [Key] = @key", new { key = package.PackageKey, isListed = isListed });
+        }
     }
 }

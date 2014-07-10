@@ -20,12 +20,20 @@ namespace NuGet.Services.Work.Jobs
 {
     public class DataServicePackageWithCreated : DataServicePackage
     {
+        private static readonly DateTime UnlistedPublishedUtc = new DateTime(1900, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         public DateTimeOffset? Created { get; set; }
         public SemanticVersion SemanticVersion
         {
             get
             {
                 return (this as IPackage).Version;
+            }
+        }
+        public bool IsListed
+        {
+            get
+            {
+                return !Published.Value.DateTime.Equals(UnlistedPublishedUtc);
             }
         }
     }
@@ -56,6 +64,7 @@ namespace NuGet.Services.Work.Jobs
         public const string VersionKey = "version";
         public const string SourceCreatedKey = "sourceCreated";
         public const string DeletedKey = "deleted";
+        public const string ListedKey = "listed";
         public const string PackageIndexKey = "packageIndex";
 
         private const string ContentTypeJson = "application/json";
@@ -191,7 +200,7 @@ namespace NuGet.Services.Work.Jobs
             // Test Cases
             // 1) Add a new package to the source. COVERED
             //	  Result: The new package should be present on the destination
-            // 2) Add a package as unlisted to the source. NOT COVERED
+            // 2) Add a package as unlisted to the source. COVERED
             //	  Result: The new package should be present on the destination as unlisted
             // 3) Delete a package version from the source. COVERED
             //	  Result: The package should be deleted from the destination
@@ -393,7 +402,7 @@ namespace NuGet.Services.Work.Jobs
                         throw new InvalidOperationException("Package" + package.Id + "//" + package.SemanticVersion.ToString() + "is already mirrored, but, not present in mirror.json. WRONG!");
                     }
                     var oldSourceCreated = sourceJObject[SourceCreatedKey].Value<DateTime>();
-                    var newSourceCreated = new DateTime(package.Created.Value.Ticks, DateTimeKind.Utc);
+                    var newSourceCreated = new DateTime(package.Created.Value.DateTime.Ticks, DateTimeKind.Utc);
                     if (!newSourceCreated.Equals(oldSourceCreated))
                     {
                         // This package while already mirrored to the destination, has been deleted from the source and created again to the source
@@ -457,10 +466,11 @@ namespace NuGet.Services.Work.Jobs
         private static JObject GetNewPackage(DataServicePackageWithCreated package)
         {
             JObject jObject = new JObject();
-            var utcdt = new DateTime(package.Created.Value.Ticks, DateTimeKind.Utc);
+            var utcdt = new DateTime(package.Created.Value.DateTime.Ticks, DateTimeKind.Utc);
             jObject.Add(SourceCreatedKey, utcdt.ToString(DateTimeFormatSpecifier));
             jObject.Add(IdKey, package.Id);
             jObject.Add(VersionKey, package.SemanticVersion.ToString());
+            jObject.Add(ListedKey, package.IsListed.ToString());
             // No need to add Deleted at this point
             return jObject;
         }
@@ -477,7 +487,7 @@ namespace NuGet.Services.Work.Jobs
             var lastItem = array.Count > 0 ? array[array.Count - 1] as JObject : null;
             if(lastItem != null)
             {
-                if (CompareToSourceCreated(lastItem, package.Created.Value.Ticks) > 0)
+                if (CompareToSourceCreated(lastItem, package.Created.Value.DateTime.Ticks) > 0)
                 {
                     throw new InvalidOperationException("Last package added has a greater SourceCreated Date than the new package being added");
                 }
@@ -523,6 +533,11 @@ namespace NuGet.Services.Work.Jobs
                             currentPackage = package;
                             MirrorPackage(package, destinationServer, tempPackageManager, tempLocalRepo, apiKey, timeOut);
                             AddNewPackage(mirrorJson, package);
+                            if(!package.IsListed)
+                            {
+                                // The new package being pushed is not listed. Mark it as unlisted
+                                NuGetV2RepositoryMirrorPackageDeletor.SetListed(cstr, package.Id, package.SemanticVersion.ToString(), false).Wait();
+                            }
                             Log.PushedToDestination(++count);
                         }
                         catch (SourceException ex)
