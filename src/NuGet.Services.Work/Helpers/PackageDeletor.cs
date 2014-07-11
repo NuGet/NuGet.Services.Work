@@ -12,6 +12,9 @@ using Microsoft.WindowsAzure.Storage.Blob;
 
 namespace NuGet.Services.Work.Helpers
 {
+    /// <summary>
+    /// PackageDeletor should only operate based on SqlConnectionStrings and StorageConnectionstrings and nothing more
+    /// </summary>
     public static class PackageDeletor
     {
         public static string Normalize(string version)

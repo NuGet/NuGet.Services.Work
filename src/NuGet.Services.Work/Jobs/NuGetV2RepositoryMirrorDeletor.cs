@@ -49,11 +49,18 @@ namespace NuGet.Services.Work.Jobs
                 const string stringFormat = "{0}/{1}/{2}";
                 return String.Format(stringFormat, Id, SemanticVersion.ToString(), SourceCreated.ToString("O"));
             }
+
+            public static bool Equals(MinPackage mp, DataServicePackageWithCreated dp)
+            {
+                return mp.SourceCreated.Equals(dp.Created.Value.DateTime) && mp.SemanticVersion.Equals(dp.SemanticVersion) && String.Equals(mp.Id, dp.Id, StringComparison.OrdinalIgnoreCase);
+            }
         }
+        public const string LastCreatedKey = "lastCreated";
         public const string PackageIndexKey = "packageIndex";
         public const string DeletedKey = "deleted";
         public const string ListedKey = "listed";
         private const string CountDateTimeRangeFormat = "Packages/$count/?$filter=Created ge DateTime'{0}' and Created lt DateTime'{1}'&$orderby=Created";
+        private static readonly string UnlistedPackagesQueryOption = "Published eq DateTime'" + DataServicePackageWithCreated.UnlistedPublishedUtc.ToString("O") + "' and Created le DateTime'{0}'";
 
         private static int GetPackagesCount(Uri v2Feed, DateTime start, DateTime end)
         {
@@ -206,10 +213,8 @@ namespace NuGet.Services.Work.Jobs
             return list;
         }
 
-        private static List<MinPackage> GetDeletedPackages(Uri sourceUri, JObject mirrorJson)
+        private static List<MinPackage> GetDeletedPackages(Uri sourceUri, List<MinPackage> destinationPackages)
         {
-            var destinationPackages = GetSortedMinPackages(mirrorJson, ignoreDeleted: true);
-
             if (destinationPackages.Count == 0)
             {
                 return destinationPackages;
@@ -224,6 +229,103 @@ namespace NuGet.Services.Work.Jobs
             }
 
             return list;
+        }
+
+        private static async Task DeletePackages(Uri sourceUri, CloudStorageAccount account, SqlConnectionStringBuilder cstr, List<MinPackage> destinationPackages)
+        {
+            var minPackagesToBeDeleted = GetDeletedPackages(sourceUri, destinationPackages);
+            NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.TotalNumberOfPackagesToBeDeleted(minPackagesToBeDeleted.Count);
+            using (var connection = new SqlConnection(cstr.ConnectionString))
+            {
+                await connection.OpenAsync();
+                foreach (var minPackage in minPackagesToBeDeleted)
+                {
+                    await DeletePackage(connection, account, minPackage.SourceJObject, minPackage.Id, minPackage.SemanticVersion.ToString());
+                }
+            }
+        }
+
+        private static async Task SetListedPackages(Uri sourceUri, SqlConnectionStringBuilder cstr, List<MinPackage> destinationPackages, DateTime lastCreated)
+        {
+            var unlistedDataServicePackagesInSource = GetUnlistedPackages(sourceUri, lastCreated);
+            // TODO : Log that there are so many unlisted packages in source
+            var unlistedMinPackagesInDestination = destinationPackages.Where(p => !p.SourceJObject.Value<bool>(ListedKey)).ToList();
+            // TODO : Log that there are so many unlisted packages in destination
+            List<MinPackage> unlistedMinPackagesInSource = new List<MinPackage>();
+
+            foreach (var dataServicePackageWithCreated in unlistedDataServicePackagesInSource)
+            {
+                if (dataServicePackageWithCreated.IsListed)
+                {
+                    throw new InvalidOperationException("Package returned as unlisted from the source is listed. WRONG!");
+                }
+                var minPackage = destinationPackages.Where(mp => MinPackage.Equals(mp, dataServicePackageWithCreated)).SingleOrDefault();
+                if (minPackage != null)
+                {
+                    unlistedMinPackagesInSource.Add(minPackage);
+                }
+            }
+
+            var packagesToBeListedInDestination = unlistedMinPackagesInDestination.Where(p => !unlistedMinPackagesInSource.Contains(p));
+            // TODO : Log that there are so many packages to be marked as 'listed' in destination
+            var packagesToBeUnlistedInDestination = unlistedMinPackagesInSource.Where(p => !unlistedMinPackagesInDestination.Contains(p));
+            // TODO : Log that there are so many packages to be marked as 'unlisted' in destination
+
+            using(var connection = new SqlConnection(cstr.ConnectionString))
+            {
+                await connection.OpenAsync();
+                // Set packages as listed
+                foreach(var listedPackage in packagesToBeListedInDestination)
+                {
+                    // TODO: Log that this package is being marked as listed
+                    await PackageDeletor.SetListed(connection, listedPackage.Id, listedPackage.SemanticVersion.ToString(), true);
+                }
+
+                // Set packages as unlisted
+                foreach(var unlistedPackage in packagesToBeUnlistedInDestination)
+                {
+                    // TODO: Log that this package is being marked as unlisted
+                    await PackageDeletor.SetListed(connection, unlistedPackage.Id, unlistedPackage.SemanticVersion.ToString(), false);
+                }
+            }
+        }
+
+        private static List<DataServicePackageWithCreated> GetUnlistedPackages(Uri sourceUri, DateTime lastCreated)
+        {
+            var serviceContext = new DataServices.DataServiceContext(sourceUri)
+            {
+                MergeOption = DataServices.MergeOption.OverwriteChanges,
+                IgnoreMissingProperties = true,
+            };
+
+            int skipIndex = 0;
+            var unlistedPackages = GetUnlistedPackages(serviceContext, lastCreated);
+            var allUnlistedPackagesList = new List<DataServicePackageWithCreated>();
+
+            do
+            {
+                var unlistedPackagesList = unlistedPackages.Skip(skipIndex).ToList();
+                if (unlistedPackagesList.Count == 0)
+                {
+                    break;
+                }
+
+                allUnlistedPackagesList.AddRange(unlistedPackagesList);
+                skipIndex = skipIndex + unlistedPackagesList.Count;
+            } while (true);
+
+            return allUnlistedPackagesList;
+        }
+
+        private static DataServices.DataServiceQuery<DataServicePackageWithCreated> GetUnlistedPackages(DataServices.DataServiceContext serviceContext, DateTime lastCreated)
+        {
+            // TODO : LOG
+            var packagesQuery = serviceContext.CreateQuery<DataServicePackageWithCreated>("Packages");
+            // The following query gets unlisted packages created on or before 'lastCreated'
+            var queryOptionValue = String.Format(UnlistedPackagesQueryOption, lastCreated.ToString("O"));
+            packagesQuery = packagesQuery.AddQueryOption("$orderby", "Created, Id, Version");
+            packagesQuery = packagesQuery.AddQueryOption("$filter", queryOptionValue);
+            return packagesQuery;
         }
 
         public static async Task DeletePackage(SqlConnectionStringBuilder cstr, CloudStorageAccount account, JObject sourceJObject, string id, string version)
@@ -248,22 +350,18 @@ namespace NuGet.Services.Work.Jobs
             }
         }
 
-        public static async Task DeletePackages(Uri sourceUri, JObject mirrorJson, CloudStorageAccount account, SqlConnectionStringBuilder cstr)
+        public static async Task DeleteAndSetListedPackages(Uri sourceUri, JObject mirrorJson, CloudStorageAccount account, SqlConnectionStringBuilder cstr)
         {
-            var minPackagesToBeDeleted = GetDeletedPackages(sourceUri, mirrorJson);
-            NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.TotalNumberOfPackagesToBeDeleted(minPackagesToBeDeleted.Count);
-            using(var connection = new SqlConnection(cstr.ConnectionString))
-            {
-                await connection.OpenAsync();
-                foreach(var minPackage in minPackagesToBeDeleted)
-                {
-                    await DeletePackage(connection, account, minPackage.SourceJObject, minPackage.Id, minPackage.SemanticVersion.ToString());
-                }
-            }
+            var destinationPackages = GetSortedMinPackages(mirrorJson, ignoreDeleted: true);
+            var lastCreated = mirrorJson.Value<DateTime>(LastCreatedKey);
+
+            await SetListedPackages(sourceUri, cstr, destinationPackages, lastCreated);
+            await DeletePackages(sourceUri, account, cstr, destinationPackages);
         }
 
         public static async Task SetListed(SqlConnectionStringBuilder cstr, string id, string version, bool isListed)
         {
+            // TODO : Log that such and such package is being marked as listed or unlisted
             using(var connection = new SqlConnection(cstr.ConnectionString))
             {
                 await connection.OpenAsync();

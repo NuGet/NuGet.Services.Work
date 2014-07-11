@@ -20,7 +20,7 @@ namespace NuGet.Services.Work.Jobs
 {
     public class DataServicePackageWithCreated : DataServicePackage
     {
-        private static readonly DateTime UnlistedPublishedUtc = new DateTime(1900, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        public static readonly DateTime UnlistedPublishedUtc = new DateTime(1900, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         public DateTimeOffset? Created { get; set; }
         public SemanticVersion SemanticVersion
         {
@@ -155,7 +155,7 @@ namespace NuGet.Services.Work.Jobs
             {
                 try
                 {
-                    await NuGetV2RepositoryMirrorPackageDeletor.DeletePackages(sourceUri, mirrorJson, account, cstr);
+                    await NuGetV2RepositoryMirrorPackageDeletor.DeleteAndSetListedPackages(sourceUri, mirrorJson, account, cstr);
                 }
                 catch (Exception ex)
                 {
@@ -470,7 +470,7 @@ namespace NuGet.Services.Work.Jobs
             jObject.Add(SourceCreatedKey, utcdt.ToString(DateTimeFormatSpecifier));
             jObject.Add(IdKey, package.Id);
             jObject.Add(VersionKey, package.SemanticVersion.ToString());
-            jObject.Add(ListedKey, package.IsListed.ToString());
+            jObject.Add(ListedKey, package.IsListed);
             // No need to add Deleted at this point
             return jObject;
         }
