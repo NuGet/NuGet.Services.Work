@@ -475,10 +475,10 @@ namespace NuGet.Services.Work.Jobs
             return jObject;
         }
 
-        private static void AddNewPackage(JObject mirrorJson, DataServicePackageWithCreated package)
+        private static JObject AddNewPackage(JObject mirrorJson, DataServicePackageWithCreated package)
         {
-            // TODO: Check for prior existence of the package Id, version and delete the old one if SourceLastCreated is not the same
-            // This logic has to be in the 409 Conflict path
+            // Should Check for prior existence of the package Id, version and delete the old one if SourceLastCreated is not the same
+            // This logic is added in the 409 Conflict path
             var array = mirrorJson[PackageIndexKey] as JArray;
             if (array == null)
             {
@@ -492,7 +492,11 @@ namespace NuGet.Services.Work.Jobs
                     throw new InvalidOperationException("Last package added has a greater SourceCreated Date than the new package being added");
                 }
             }
-            array.Add(GetNewPackage(package));
+
+            var jObject = GetNewPackage(package);
+            array.Add(jObject);
+
+            return jObject;
         }
 
         /// <summary>
@@ -532,11 +536,11 @@ namespace NuGet.Services.Work.Jobs
                         {
                             currentPackage = package;
                             MirrorPackage(package, destinationServer, tempPackageManager, tempLocalRepo, apiKey, timeOut);
-                            AddNewPackage(mirrorJson, package);
+                            var jObject = AddNewPackage(mirrorJson, package);
                             if(!package.IsListed)
                             {
                                 // The new package being pushed is not listed. Mark it as unlisted
-                                NuGetV2RepositoryMirrorPackageDeletor.SetListed(cstr, package.Id, package.SemanticVersion.ToString(), false).Wait();
+                                NuGetV2RepositoryMirrorPackageDeletor.SetListed(cstr, jObject, package.Id, package.SemanticVersion.ToString(), false).Wait();
                             }
                             Log.PushedToDestination(++count);
                         }

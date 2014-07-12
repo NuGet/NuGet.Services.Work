@@ -277,15 +277,13 @@ namespace NuGet.Services.Work.Jobs
                 // Set packages as listed
                 foreach(var listedPackage in packagesToBeListedInDestination)
                 {
-                    NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.SetListed(listedPackage.ToString(), "listed");
-                    await PackageDeletor.SetListed(connection, listedPackage.Id, listedPackage.SemanticVersion.ToString(), true);
+                    await SetListed(connection, listedPackage.SourceJObject, listedPackage.Id, listedPackage.SemanticVersion.ToString(), isListed: true);
                 }
 
                 // Set packages as unlisted
                 foreach(var unlistedPackage in packagesToBeUnlistedInDestination)
                 {
-                    NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.SetListed(unlistedPackage.ToString(), "unlisted");
-                    await PackageDeletor.SetListed(connection, unlistedPackage.Id, unlistedPackage.SemanticVersion.ToString(), false);
+                    await SetListed(connection, unlistedPackage.SourceJObject, unlistedPackage.Id, unlistedPackage.SemanticVersion.ToString(), isListed: false);
                 }
             }
         }
@@ -319,13 +317,19 @@ namespace NuGet.Services.Work.Jobs
 
         private static DataServices.DataServiceQuery<DataServicePackageWithCreated> GetUnlistedPackages(DataServices.DataServiceContext serviceContext, DateTime lastCreated)
         {
-            // TODO : LOG
             var packagesQuery = serviceContext.CreateQuery<DataServicePackageWithCreated>("Packages");
             // The following query gets unlisted packages created on or before 'lastCreated'
             var queryOptionValue = String.Format(UnlistedPackagesQueryOption, lastCreated.ToString("O"));
             packagesQuery = packagesQuery.AddQueryOption("$orderby", "Created, Id, Version");
             packagesQuery = packagesQuery.AddQueryOption("$filter", queryOptionValue);
             return packagesQuery;
+        }
+
+        private static async Task SetListed(SqlConnection connection, JObject sourceJObject, string id, string version, bool isListed)
+        {
+            NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.SetListed(id, version, isListed ? "listed" : "unlisted");
+            await PackageDeletor.SetListed(connection, id, version, isListed);
+            sourceJObject[ListedKey] = isListed;
         }
 
         public static async Task DeletePackage(SqlConnectionStringBuilder cstr, CloudStorageAccount account, JObject sourceJObject, string id, string version)
@@ -359,14 +363,12 @@ namespace NuGet.Services.Work.Jobs
             await DeletePackages(sourceUri, account, cstr, destinationPackages);
         }
 
-        public static async Task SetListed(SqlConnectionStringBuilder cstr, string id, string version, bool isListed)
+        public static async Task SetListed(SqlConnectionStringBuilder cstr, JObject sourceJObject, string id, string version, bool isListed)
         {
-            // TODO : Log that such and such package is being marked as listed or unlisted
             using(var connection = new SqlConnection(cstr.ConnectionString))
             {
                 await connection.OpenAsync();
-                NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.SetListed(id + "." + version, isListed ? "listed" : "unlisted");
-                await PackageDeletor.SetListed(connection, id, version, isListed);
+                await SetListed(connection, sourceJObject, id, version, isListed);
             }
         }
     }
@@ -435,7 +437,7 @@ namespace NuGet.Services.Work.Jobs
         [Event(
             eventId: 10,
             Level = EventLevel.Informational,
-            Message = "Package {0} was marked as '{1}'")]
-        public void SetListed(string package, string listed) { WriteEvent(10, package, listed); }
+            Message = "Package {0}.{1} was marked as '{2}'")]
+        public void SetListed(string packageId, string version, string listed) { WriteEvent(10, packageId, version, listed); }
     }
 }
