@@ -248,9 +248,9 @@ namespace NuGet.Services.Work.Jobs
         private static async Task SetListedPackages(Uri sourceUri, SqlConnectionStringBuilder cstr, List<MinPackage> destinationPackages, DateTime lastCreated)
         {
             var unlistedDataServicePackagesInSource = GetUnlistedPackages(sourceUri, lastCreated);
-            // TODO : Log that there are so many unlisted packages in source
+            NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.SourceUnlistedPackagesCount(unlistedDataServicePackagesInSource.Count);
             var unlistedMinPackagesInDestination = destinationPackages.Where(p => !p.SourceJObject.Value<bool>(ListedKey)).ToList();
-            // TODO : Log that there are so many unlisted packages in destination
+            NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.DestinationUnlistedPackagesCount(unlistedMinPackagesInDestination.Count);
             List<MinPackage> unlistedMinPackagesInSource = new List<MinPackage>();
 
             foreach (var dataServicePackageWithCreated in unlistedDataServicePackagesInSource)
@@ -266,10 +266,10 @@ namespace NuGet.Services.Work.Jobs
                 }
             }
 
-            var packagesToBeListedInDestination = unlistedMinPackagesInDestination.Where(p => !unlistedMinPackagesInSource.Contains(p));
-            // TODO : Log that there are so many packages to be marked as 'listed' in destination
-            var packagesToBeUnlistedInDestination = unlistedMinPackagesInSource.Where(p => !unlistedMinPackagesInDestination.Contains(p));
-            // TODO : Log that there are so many packages to be marked as 'unlisted' in destination
+            var packagesToBeListedInDestination = unlistedMinPackagesInDestination.Where(p => !unlistedMinPackagesInSource.Contains(p)).ToList();
+            NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.PackagesToBeListedCount(packagesToBeListedInDestination.Count);
+            var packagesToBeUnlistedInDestination = unlistedMinPackagesInSource.Where(p => !unlistedMinPackagesInDestination.Contains(p)).ToList();
+            NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.PackagesToBeUnlistedCount(packagesToBeUnlistedInDestination.Count);
 
             using(var connection = new SqlConnection(cstr.ConnectionString))
             {
@@ -277,14 +277,14 @@ namespace NuGet.Services.Work.Jobs
                 // Set packages as listed
                 foreach(var listedPackage in packagesToBeListedInDestination)
                 {
-                    // TODO: Log that this package is being marked as listed
+                    NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.SetListed(listedPackage.ToString(), "listed");
                     await PackageDeletor.SetListed(connection, listedPackage.Id, listedPackage.SemanticVersion.ToString(), true);
                 }
 
                 // Set packages as unlisted
                 foreach(var unlistedPackage in packagesToBeUnlistedInDestination)
                 {
-                    // TODO: Log that this package is being marked as unlisted
+                    NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.SetListed(unlistedPackage.ToString(), "unlisted");
                     await PackageDeletor.SetListed(connection, unlistedPackage.Id, unlistedPackage.SemanticVersion.ToString(), false);
                 }
             }
@@ -365,6 +365,7 @@ namespace NuGet.Services.Work.Jobs
             using(var connection = new SqlConnection(cstr.ConnectionString))
             {
                 await connection.OpenAsync();
+                NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.SetListed(id + "." + version, isListed ? "listed" : "unlisted");
                 await PackageDeletor.SetListed(connection, id, version, isListed);
             }
         }
@@ -406,5 +407,35 @@ namespace NuGet.Services.Work.Jobs
             Level = EventLevel.Informational,
             Message = "Deleted package {0}. Delete time is {1}")]
         public void DeletedPackage(string package, string deleteTime) { WriteEvent(5, package, deleteTime); }
+
+        [Event(
+            eventId: 6,
+            Level = EventLevel.Informational,
+            Message = "Number of unlisted packages in source: {0}")]
+        public void SourceUnlistedPackagesCount(int unlistedPackagesCount) { WriteEvent(6, unlistedPackagesCount); }
+
+        [Event(
+            eventId: 7,
+            Level = EventLevel.Informational,
+            Message = "Number of unlisted packages in destination: {0}")]
+        public void DestinationUnlistedPackagesCount(int unlistedPackagesCount) { WriteEvent(7, unlistedPackagesCount); }
+
+        [Event(
+            eventId: 8,
+            Level = EventLevel.Informational,
+            Message = "Number of packages to be marked as 'listed' in destination: {0}")]
+        public void PackagesToBeListedCount(int packagesToBeListedCount) { WriteEvent(8, packagesToBeListedCount); }
+
+        [Event(
+            eventId: 9,
+            Level = EventLevel.Informational,
+            Message = "Number of packages to be marked as 'unlisted' in destination: {0}")]
+        public void PackagesToBeUnlistedCount(int packagesToBeUnlistedCount) { WriteEvent(9, packagesToBeUnlistedCount); }
+
+        [Event(
+            eventId: 10,
+            Level = EventLevel.Informational,
+            Message = "Package {0} was marked as '{1}'")]
+        public void SetListed(string package, string listed) { WriteEvent(10, package, listed); }
     }
 }

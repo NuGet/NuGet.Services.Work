@@ -208,9 +208,9 @@ namespace NuGet.Services.Work.Jobs
             //	  Result: The package should be deleted from the destination. And, PackageRegistration should be deleted too as appropriate
             // 5) Delete a package version from the source. And, add a new package with same Id and version as the deleted one. COVERED
             //	  Result: Old package with Id and version must be deleted from the destination. And, the new package with the same Id and Version must be added
-            // 6) Mark a listed package as unlisted. NOT COVERED
+            // 6) Mark a listed package as unlisted. COVERED
             //	  Result: The package should be unlisted in the destination too
-            // 7) Mark an unlisted package as listed. NOT COVERED
+            // 7) Mark an unlisted package as listed. COVERED
             //	  Result: The package should be listed in the destination too
             //
             try
