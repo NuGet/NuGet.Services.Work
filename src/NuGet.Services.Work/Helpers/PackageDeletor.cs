@@ -113,6 +113,22 @@ namespace NuGet.Services.Work.Helpers
                     Id = id
                 });
         }
+
+        public static async Task<bool> DeleteStaleRegistation(SqlConnection conn, dynamic package)
+        {
+            var count = (await conn.QueryAsync<int>(@"
+    SELECT  COUNT(1)
+    FROM    Packages
+    WHERE   PackageRegistrationKey = @prkey", new { prkey = package.PackageRegistrationKey })).Single();
+
+            if (count == 0)
+            {
+                await DeleteRegistration(conn, package.Id);
+                return true;
+            }
+
+            return false;
+        }
         private static Task DeletePackageData(dynamic package, SqlConnection connection)
         {
             var result = connection.Query(@"
@@ -219,7 +235,7 @@ namespace NuGet.Services.Work.Helpers
                 AccessCondition.GenerateEmptyCondition(),
                 new BlobRequestOptions(), new OperationContext());
         }
-        public static async Task<IEnumerable<dynamic>> GetDeletePackages(SqlConnection conn, string id, string version, bool allVersions)
+        public static async Task<IEnumerable<dynamic>> GetDeletePackages(SqlConnection conn, string id, string version)
         {
             // Parse the version
             if (!String.IsNullOrWhiteSpace(version))
@@ -236,12 +252,11 @@ namespace NuGet.Services.Work.Helpers
 		p.Hash 
 	FROM Packages p
 	INNER JOIN PackageRegistrations pr ON p.PackageRegistrationKey = pr.[Key]
-	WHERE pr.Id = @Id AND (@AllVersions = 1 OR p.NormalizedVersion = @Version)", new
-                                                                                {
-                                                                                    id,
-                                                                                    allVersions,
-                                                                                    version
-                                                                                });
+	WHERE pr.Id = @Id AND p.NormalizedVersion = @Version", new
+                                                            {
+                                                                id,
+                                                                version
+                                                            });
             return packages;
         }
         public static async Task SetListed(SqlConnection conn, string id, string version, bool isListed)

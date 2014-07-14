@@ -142,22 +142,22 @@ namespace NuGet.Services.Work.Jobs
                 return GetDeletedPackageIndices(sourceUri, destinationPackages, startIndex, endIndex, start);
             }
 
-            var leftCount = GetPackagesCount(sourceUri, start, end);
-            var rightCount = endIndex - startIndex;
+            var srcCount = GetPackagesCount(sourceUri, start, end);
+            var destCount = endIndex - startIndex;
 
-            if (leftCount == rightCount)
+            if (srcCount == destCount)
             {
                 return EmptyPackages;
             }
 
-            if (rightCount < leftCount)
+            if (destCount < srcCount)
             {
-                throw new InvalidOperationException("leftCount cannot be greater than rightCount. That should mean some packages are not mirrored yet");
+                throw new InvalidOperationException("srcCount cannot be greater than destCount. That should mean some packages are not mirrored yet");
             }
 
-            if (leftCount == 0)
+            if (srcCount == 0)
             {
-                // return rightOnlyPackages
+                // return destOnlyPackages
                 var list = new List<int>();
                 for(int i = startIndex; i < endIndex; i++)
                 {
@@ -167,7 +167,7 @@ namespace NuGet.Services.Work.Jobs
                 return list;
             }
 
-            var diffCount = rightCount - leftCount;
+            var diffCount = destCount - srcCount;
             NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.DiffCountBetween(start.ToString("O"), end.ToString("O"), diffCount);
 
             var midIndex = (startIndex + endIndex) / 2;
@@ -343,14 +343,19 @@ namespace NuGet.Services.Work.Jobs
 
         public static async Task DeletePackage(SqlConnection connection, CloudStorageAccount account, JObject sourceJObject, string id, string version)
         {
-            var dynamicPackages = await PackageDeletor.GetDeletePackages(connection, id, version, allVersions: false);
-            foreach (var dynamicPackage in dynamicPackages)
+            var dynamicPackages = await PackageDeletor.GetDeletePackages(connection, id, version);
+            if(!dynamicPackages.IsEmpty())
             {
+                var dynamicPackage = dynamicPackages.Single();
                 NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.DeletingPackage(sourceJObject.ToString());
                 await PackageDeletor.DeletePackage(dynamicPackage, connection, account);
                 var deletedTime = DateTime.UtcNow.ToString("O");
                 sourceJObject[DeletedKey] = deletedTime;
                 NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.DeletedPackage(sourceJObject.ToString(), deletedTime);
+                if (await PackageDeletor.DeleteStaleRegistation(connection, dynamicPackage))
+                {
+                    NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.DeletedStaleRegistration(dynamicPackage.Id);
+                }
             }
         }
 
@@ -439,5 +444,11 @@ namespace NuGet.Services.Work.Jobs
             Level = EventLevel.Informational,
             Message = "Package {0}.{1} was marked as '{2}'")]
         public void SetListed(string packageId, string version, string listed) { WriteEvent(10, packageId, version, listed); }
+
+        [Event(
+            eventId: 11,
+            Level = EventLevel.Informational,
+            Message = "Stale registration for '{0}' deleted")]
+        public void DeletedStaleRegistration(string packageId) { WriteEvent(11, packageId); }
     }
 }
