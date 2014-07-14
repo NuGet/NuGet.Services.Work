@@ -72,9 +72,7 @@ namespace NuGet.Services.Work.Jobs.Catalog
 
                 // 2. Collect new checksums
                 Log.CollectingChecksums(catalogDirectory.Uri.ToString());
-                var timestamp = DateTime.UtcNow;
-                await checksumCollector.Run(http, indexBlob.Uri, checksums.TimestampUtc);
-                checksums.TimestampUtc = timestamp;
+                await checksumCollector.Run(http, indexBlob.Uri, checksums.Cursor);
                 Log.CollectedChecksums(checksums.Data.Count);
 
                 // 3. Process updates
@@ -84,9 +82,7 @@ namespace NuGet.Services.Work.Jobs.Catalog
 
                 // 4. Collect new checksums
                 Log.CollectingChecksums(catalogDirectory.Uri.ToString());
-                timestamp = DateTime.UtcNow;
-                await checksumCollector.Run(http, indexBlob.Uri, checksums.TimestampUtc);
-                checksums.TimestampUtc = timestamp;
+                await checksumCollector.Run(http, indexBlob.Uri, checksums.Cursor);
                 Log.CollectedChecksums(checksums.Data.Count);
 
                 // 5. Save existing checksums file
