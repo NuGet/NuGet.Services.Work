@@ -396,7 +396,7 @@ namespace NuGet.Services.Work.Jobs
             {
                 // '409 Conflict' from Destination- Package already exists in destination. Don't rethrow
                 case HttpStatusCode.Conflict:
-                    var sourceJObject = GetJObject(mirrorJson, package.Id, package.SemanticVersion.ToString());
+                    var sourceJObject = GetJObject(mirrorJson, package.Id, package.SemanticVersion);
                     if (sourceJObject == null)
                     {
                         throw new InvalidOperationException("Package" + package.Id + "//" + package.SemanticVersion.ToString() + "is already mirrored, but, not present in mirror.json. WRONG!");
@@ -433,10 +433,10 @@ namespace NuGet.Services.Work.Jobs
             var sourceJObjectSourceCreated = jObject[SourceCreatedKey].Value<DateTime>();
             return sourceJObjectSourceCreated.CompareTo(sourceCreatedUtc);
         }
-        private static JObject GetJObject(JObject mirrorJson, string id, string version)
+        private static JObject GetJObject(JObject mirrorJson, string id, SemanticVersion version)
         {
             var packageIndex = mirrorJson[PackageIndexKey];
-            return (JObject)packageIndex.Where(s => String.Equals(s[IdKey].ToString(), id, StringComparison.OrdinalIgnoreCase) && String.Equals(s[VersionKey].ToString(), version, StringComparison.OrdinalIgnoreCase)).SingleOrDefault();
+            return (JObject)packageIndex.Where(s => s[DeletedKey] == null && String.Equals(s[IdKey].ToString(), id, StringComparison.OrdinalIgnoreCase) && version.Equals(new SemanticVersion(s[VersionKey].ToString()))).SingleOrDefault();
         }
 
         private static bool IsMirrorJsonValid(JObject mirrorJson)
@@ -522,6 +522,8 @@ namespace NuGet.Services.Work.Jobs
             {
                 do
                 {
+                    // The following code deletes the temp folder if one exists and creates a new one
+                    GetTempFolderPath(serviceContext.BaseUri.DnsSafeHost);
                     var newPackagesList = newPackages.Skip(skipIndex).ToList();
                     Log.PackagesCopyCount(newPackagesList.Count);
 
