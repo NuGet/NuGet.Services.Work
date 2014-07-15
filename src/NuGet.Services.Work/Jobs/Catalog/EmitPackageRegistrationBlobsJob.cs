@@ -15,19 +15,19 @@ using Microsoft.WindowsAzure.Storage;
 
 namespace NuGet.Services.Work.Jobs
 {
-    public class EmitResolverBlobsJob : JobHandler<EmitResolverBlobsEventSource>
+    public class EmitPackageRegistrationBlobsJob : JobHandler<EmitResolverBlobsEventSource>
     {
         private readonly ConfigurationHub Config;
 
-        public EmitResolverBlobsJob(ConfigurationHub config)
+        public EmitPackageRegistrationBlobsJob(ConfigurationHub config)
         {
             Config = config;
         }
 
-        public CloudStorageAccount ResolverStorage { get; set; }
-        public string ResolverPath { get; set; }
-        public string ResolverBaseAddress { get; set; }
-        public string ResolverDirectory { get; set; }
+        public CloudStorageAccount TargetStorageAccount { get; set; }
+        public string TargetPath { get; set; }
+        public string TargetBaseAddress { get; set; }
+        public string TargetLocalDirectory { get; set; }
         public string CatalogIndexUrl { get; set; }
         public string CdnBaseAddress { get; set; }
         public string GalleryBaseAddress { get; set; }
@@ -38,38 +38,38 @@ namespace NuGet.Services.Work.Jobs
             await Extend(TimeSpan.FromDays(365));
 
             // Set defaults
-            ResolverStorage = ResolverStorage ?? Config.Storage.Primary;
+            TargetStorageAccount = TargetStorageAccount ?? Config.Storage.Primary;
 
             // Check required payload
-            ArgCheck.Require(ResolverBaseAddress, "ResolverBaseAddress");
-            ArgCheck.Require(CatalogIndexUrl, "CatalogIndexUri");
+            ArgCheck.Require(TargetBaseAddress, "TargetBaseAddress");
+            ArgCheck.Require(CatalogIndexUrl, "CatalogIndexUrl");
             ArgCheck.Require(CdnBaseAddress, "CdnBaseAddress");
             ArgCheck.Require(GalleryBaseAddress, "GalleryBaseAddress");
 
             // Clean input data
-            if (!ResolverBaseAddress.EndsWith("/"))
+            if (!TargetBaseAddress.EndsWith("/"))
             {
-                ResolverBaseAddress += "/";
+                TargetBaseAddress += "/";
             }
-            var resolverBaseUri = new Uri(ResolverBaseAddress);
+            var resolverBaseUri = new Uri(TargetBaseAddress);
             CdnBaseAddress = CdnBaseAddress.TrimEnd('/');
             GalleryBaseAddress = GalleryBaseAddress.TrimEnd('/');
             
             // Load Storage
             NuGet.Services.Metadata.Catalog.Persistence.Storage storage;
             string storageDesc;
-            if (String.IsNullOrEmpty(ResolverDirectory))
+            if (String.IsNullOrEmpty(TargetLocalDirectory))
             {
-                ArgCheck.Require(ResolverStorage, "ResolverStorage");
-                ArgCheck.Require(ResolverPath, "ResolverPath");
-                var dir = StorageHelpers.GetBlobDirectory(ResolverStorage, ResolverPath);
+                ArgCheck.Require(TargetStorageAccount, "ResolverStorage");
+                ArgCheck.Require(TargetPath, "ResolverPath");
+                var dir = StorageHelpers.GetBlobDirectory(TargetStorageAccount, TargetPath);
                 storage = new AzureStorage(dir, resolverBaseUri);
                 storageDesc = dir.Uri.ToString();
             }
             else
             {
-                storage = new FileStorage(ResolverBaseAddress, ResolverDirectory);
-                storageDesc = ResolverDirectory;
+                storage = new FileStorage(TargetBaseAddress, TargetLocalDirectory);
+                storageDesc = TargetLocalDirectory;
             }
 
 
@@ -105,11 +105,15 @@ namespace NuGet.Services.Work.Jobs
             Log.EmittedResolverBlobs();
 
             Log.StoringCursor(since.ToString("O"));
-            await storage.Save(cursorUri, new StringStorageContent(new JObject { 
+            var cursorContent = new JObject { 
                 { "http://schema.nuget.org/collectors/resolver#cursor", new JObject { 
                     { "@value", since.ToString() }, 
                     { "@type", "http://www.w3.org/2001/XMLSchema#dateTime" } } }, 
-                { "http://schema.nuget.org/collectors/resolver#source", CatalogIndexUrl } }.ToString()));
+                { "http://schema.nuget.org/collectors/resolver#source", CatalogIndexUrl } }.ToString();
+            await storage.Save(cursorUri, new StringStorageContent(
+                cursorContent,
+                contentType: "application/json",
+                cacheControl: "no-store"));
             Log.StoredCursor();
 
             await this.Enqueue(this.Invocation.Job, this.Invocation.Payload, TimeSpan.FromSeconds(3));
