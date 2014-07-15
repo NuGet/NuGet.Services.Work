@@ -39,6 +39,9 @@ namespace NuGet.Services.Work.Jobs.Catalog
 
         protected internal override async Task Execute()
         {
+            // Disable job re-run logic
+            await Extend(TimeSpan.FromDays(365));
+
             var collectorBatchSize = ChecksumCollectorBatchSize ?? DefaultChecksumCollectorBatchSize;
             var catalogPageSize = CatalogPageSize ?? DefaultCatalogPageSize;
 
