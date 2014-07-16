@@ -48,12 +48,16 @@ namespace NuGet.Services.Work.Api.Controllers
         [Route("{id}/log", Name = Routes.GetInvocationLog)]
         public async Task<IHttpActionResult> GetInvocationLog(Guid id)
         {
-            var invocation = await Queue.Get(id);
-            if(invocation == null || String.IsNullOrEmpty(invocation.LogUrl))
+            // Locate the blob
+            var container = Storage.Primary.Blobs.Client.GetContainerReference(WorkService.InvocationLogsContainerBaseName);
+            var blob = container.GetBlockBlobReference("invocations/" + id.ToString("N") + ".json");
+
+            if (!await blob.ExistsAsync())
             {
                 return NotFound();
             }
-            return await TransferBlob(invocation.LogUrl);
+
+            return await TransferBlob(blob.Uri);
         }
 
         [Route("", Name = Routes.GetActiveInvocations)]

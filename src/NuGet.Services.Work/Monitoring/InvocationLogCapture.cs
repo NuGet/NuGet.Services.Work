@@ -12,6 +12,7 @@ using Microsoft.WindowsAzure.Storage.Blob;
 using NuGet.Services.Storage;
 using System.Reactive.Subjects;
 using Microsoft.Practices.EnterpriseLibrary.SemanticLogging.Sinks;
+using System.Threading;
 
 namespace NuGet.Services.Work.Monitoring
 {
@@ -19,9 +20,9 @@ namespace NuGet.Services.Work.Monitoring
     {
         private ObservableEventListener _listener;
         private IObservable<EventEntry> _eventStream;
-        
+
         public InvocationState Invocation { get; private set; }
-        
+
         public InvocationLogCapture(InvocationState invocation)
         {
             Invocation = invocation;
@@ -33,12 +34,13 @@ namespace NuGet.Services.Work.Monitoring
                            select events;
         }
 
-        public virtual Task Start() {
+        public virtual Task Start()
+        {
             _listener.EnableEvents(InvocationEventSource.Log, EventLevel.Informational);
-            return Task.FromResult<object>(null);
+            return Task.FromResult(0);
         }
 
-        public virtual Task<Uri> End() 
+        public virtual Task<Uri> End()
         {
             return Task.FromResult<Uri>(null);
         }
@@ -58,21 +60,21 @@ namespace NuGet.Services.Work.Monitoring
                 }
             }
         }
-    
+
         public IDisposable Subscribe(IObserver<EventEntry> observer)
         {
- 	        return _eventStream.Subscribe(observer);
+            return _eventStream.Subscribe(observer);
         }
     }
 
     public class BlobInvocationLogCapture : InvocationLogCapture
     {
-        private SinkSubscription<FlatFileSink> _eventSubscription;
-        private IDisposable _timerSubscription;
-
+        private IDisposable _eventSubscription;
+        
         private readonly string _tempDirectory;
         private string _tempFile;
         private string _blobName;
+        private CloudBlockBlob _targetBlob;
 
         public StorageHub Storage { get; private set; }
 
@@ -102,45 +104,54 @@ namespace NuGet.Services.Work.Monitoring
             {
                 File.Delete(_tempFile);
             }
-            
-            // Fetch the current logs if this is a continuation, we'll append to them during the invocation
-            if (Invocation.IsContinuation)
-            {
-                await Storage.Primary.Blobs.DownloadBlob(WorkService.InvocationLogsContainerBaseName, "invocations/" + _blobName, _tempFile);
-            }
-            
-            // Capture the events into a JSON file and a plain text file
-            _eventSubscription = this.LogToFlatFile(
-                _tempFile, 
-                new JsonEventTextFormatter(EventTextFormatting.Indented, dateTimeFormat: "O"));
 
-            // Set up the flush task
-            _timerSubscription = Observable.Interval(TimeSpan.FromSeconds(5)).Subscribe(_ =>
+            // Locate the log blob
+            var container = Storage.Primary.Blobs.Client.GetContainerReference(WorkService.InvocationLogsContainerBaseName);
+            _targetBlob = container.GetBlockBlobReference("invocations/" + _blobName);
+
+            // Fetch the current logs if this is a continuation, we'll append to them during the invocation
+            if (Invocation.IsContinuation && await _targetBlob.ExistsAsync())
             {
-                _eventSubscription.Sink.FlushAsync().Wait();
-                UploadLog().Wait();
-            });
+                await _targetBlob.DownloadToFileAsync(_tempFile, FileMode.Create);
+            }
+
+            // Capture the events into a JSON file and a plain text file
+            var formatter = new JsonEventTextFormatter(EventTextFormatting.Indented, dateTimeFormat: "O");
+            _eventSubscription = this.Buffer(TimeSpan.FromSeconds(5))
+                .Subscribe(
+                onNext: evts =>
+                {
+                    // Dump to the temp file
+                    using (var writer = new StreamWriter(new FileStream(_tempFile, FileMode.Append, FileAccess.Write)))
+                    {
+                        foreach (var evt in evts)
+                        {
+                            formatter.WriteEvent(evt, writer);
+                        }
+                    }
+
+                    // Upload the temp file
+                    UploadLog().Wait();
+                });
         }
 
-        private Task<CloudBlockBlob> UploadLog()
+        private Task UploadLog()
         {
             // Upload the file to blob storage
-            return Storage.Primary.Blobs.UploadBlob("application/json", _tempFile, WorkService.InvocationLogsContainerBaseName, "invocations/" + _blobName);
+            return _targetBlob.UploadFromFileAsync(_tempFile, FileMode.Open);
         }
 
         public override async Task<Uri> End()
         {
             // Disconnect the listener and stop the timer
-            await _eventSubscription.Sink.FlushAsync();
             _eventSubscription.Dispose();
-            _timerSubscription.Dispose();
 
-            var logBlob = await UploadLog();
-            
+            await UploadLog();
+
             // Delete the temp files
             File.Delete(_tempFile);
 
-            return logBlob.Uri;
+            return _targetBlob.Uri;
         }
     }
 }

@@ -19,12 +19,12 @@ namespace NuGet.Services.Work.Jobs
             // Extend the message lease to 10mins from now
             await Extend(TimeSpan.FromMinutes(10));
 
-            // Sleep for a minute and report that we're still running
-            await Task.Delay(TimeSpan.FromMinutes(1));
-            Log.StillRunning();
-
-            await Task.Delay(TimeSpan.FromSeconds(10 * new Random().Next(1, 5)));
-            Log.StillRunning();
+            // Sleep for 2 minutes, reporting that we're still here every 5 seconds
+            for (int i = 0; i < 24; i++)
+            {
+                Log.StillRunning();
+                await Task.Delay(TimeSpan.FromSeconds(5));
+            }
         }
     }
 
