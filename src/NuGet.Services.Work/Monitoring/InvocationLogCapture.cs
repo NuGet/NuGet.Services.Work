@@ -68,6 +68,7 @@ namespace NuGet.Services.Work.Monitoring
     public class BlobInvocationLogCapture : InvocationLogCapture
     {
         private SinkSubscription<FlatFileSink> _eventSubscription;
+        private IDisposable _timerSubscription;
 
         private readonly string _tempDirectory;
         private string _tempFile;
@@ -109,17 +110,33 @@ namespace NuGet.Services.Work.Monitoring
             }
             
             // Capture the events into a JSON file and a plain text file
-            _eventSubscription = this.LogToFlatFile(_tempFile, new JsonEventTextFormatter(EventTextFormatting.Indented, dateTimeFormat: "O"));
+            _eventSubscription = this.LogToFlatFile(
+                _tempFile, 
+                new JsonEventTextFormatter(EventTextFormatting.Indented, dateTimeFormat: "O"));
+
+            // Set up the flush task
+            _timerSubscription = Observable.Interval(TimeSpan.FromSeconds(5)).Subscribe(_ =>
+            {
+                _eventSubscription.Sink.FlushAsync().Wait();
+                UploadLog().Wait();
+            });
+        }
+
+        private Task<CloudBlockBlob> UploadLog()
+        {
+            // Upload the file to blob storage
+            return Storage.Primary.Blobs.UploadBlob("application/json", _tempFile, WorkService.InvocationLogsContainerBaseName, "invocations/" + _blobName);
         }
 
         public override async Task<Uri> End()
         {
-            // Disconnect the listener
+            // Disconnect the listener and stop the timer
+            await _eventSubscription.Sink.FlushAsync();
             _eventSubscription.Dispose();
+            _timerSubscription.Dispose();
 
-            // Upload the file to blob storage
-            var logBlob = await Storage.Primary.Blobs.UploadBlob("application/json", _tempFile, WorkService.InvocationLogsContainerBaseName, "invocations/" + _blobName);
-
+            var logBlob = await UploadLog();
+            
             // Delete the temp files
             File.Delete(_tempFile);
 
