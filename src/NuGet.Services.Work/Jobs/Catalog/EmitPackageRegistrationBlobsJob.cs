@@ -12,16 +12,20 @@ using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using NuGet.Services.Storage;
 using Microsoft.WindowsAzure.Storage;
+using NuGet.Services.Work.Monitoring;
+using System.Net.Http;
 
 namespace NuGet.Services.Work.Jobs
 {
-    public class EmitPackageRegistrationBlobsJob : JobHandler<EmitResolverBlobsEventSource>
+    public class EmitPackageRegistrationBlobsJob : JobHandler<EmitPackageRegistrationsBlobsEventSource>
     {
         private readonly ConfigurationHub Config;
 
         public EmitPackageRegistrationBlobsJob(ConfigurationHub config)
         {
             Config = config;
+
+            AddEventSource(ResolverCollectorEventSource.Log);
         }
 
         public CloudStorageAccount TargetStorageAccount { get; set; }
@@ -77,54 +81,71 @@ namespace NuGet.Services.Work.Jobs
 
             Log.LoadingCursor(cursorUri.ToString());
             StorageContent content = await storage.Load(cursorUri);
-            DateTime since;
+            CollectorCursor lastCursor;
 
             if (content == null)
             {
-                since = DateTime.MinValue.ToUniversalTime();
+                lastCursor = CollectorCursor.None;
             }
             else
             {
                 JToken cursorDoc = JsonLD.Util.JSONUtils.FromInputStream(content.GetContentStream());
-                since = cursorDoc["http://schema.nuget.org/collectors/resolver#cursor"]["@value"].ToObject<DateTime>();
+                lastCursor = (CollectorCursor)(cursorDoc["http://schema.nuget.org/collectors/resolver#cursor"].Value<DateTime>("@value"));
             }
-            Log.LoadedCursor(since.ToString("O"));
+            Log.LoadedCursor(lastCursor.Value);
 
             ResolverCollector collector = new ResolverCollector(storage, 200)
             {
-                Logger = EmitResolverBlobsEventSource.Log,
                 CdnBaseAddress = CdnBaseAddress,
                 GalleryBaseAddress = GalleryBaseAddress
             };
+            
+            collector.ProcessedCommit += cursor =>
+            {
+                if (!Equals(cursor, lastCursor))
+                {
+                    StoreCursor(storage, cursorUri, cursor).Wait();
+                    lastCursor = cursor;
+                }
+            };
+
             Log.EmittingResolverBlobs(
                 CatalogIndexUrl.ToString(),
                 storageDesc,
                 CdnBaseAddress,
                 GalleryBaseAddress);
-            since = (DateTime)await collector.Run(new Uri(CatalogIndexUrl), since);
+            lastCursor = (DateTime)await collector.Run(
+                new Uri(CatalogIndexUrl), 
+                lastCursor);
             Log.EmittedResolverBlobs();
-
-            Log.StoringCursor(since.ToString("O"));
-            var cursorContent = new JObject { 
-                { "http://schema.nuget.org/collectors/resolver#cursor", new JObject { 
-                    { "@value", since.ToString() }, 
-                    { "@type", "http://www.w3.org/2001/XMLSchema#dateTime" } } }, 
-                { "http://schema.nuget.org/collectors/resolver#source", CatalogIndexUrl } }.ToString();
-            await storage.Save(cursorUri, new StringStorageContent(
-                cursorContent,
-                contentType: "application/json",
-                cacheControl: "no-store"));
-            Log.StoredCursor();
 
             await this.Enqueue(this.Invocation.Job, this.Invocation.Payload, TimeSpan.FromSeconds(3));
         }
+
+        private async Task StoreCursor(NuGet.Services.Metadata.Catalog.Persistence.Storage storage, Uri cursorUri, CollectorCursor value)
+        {
+            if (!Equals(value, CollectorCursor.None))
+            {
+                Log.StoringCursor(value.Value);
+                var cursorContent = new JObject { 
+                { "http://schema.nuget.org/collectors/resolver#cursor", new JObject { 
+                    { "@value", value.Value }, 
+                    { "@type", "http://www.w3.org/2001/XMLSchema#dateTime" } } }, 
+                { "http://schema.nuget.org/collectors/resolver#source", CatalogIndexUrl } }.ToString();
+                await storage.Save(cursorUri, new StringStorageContent(
+                    cursorContent,
+                    contentType: "application/json",
+                    cacheControl: "no-store"));
+                Log.StoredCursor();
+            }
+        }
     }
 
-    public class EmitResolverBlobsEventSource : EventSource, ICollectorLogger
+    public class EmitPackageRegistrationsBlobsEventSource : EventSource
     {
-        public static readonly EmitResolverBlobsEventSource Log = new EmitResolverBlobsEventSource();
+        public static readonly EmitPackageRegistrationsBlobsEventSource Log = new EmitPackageRegistrationsBlobsEventSource();
 
-        private EmitResolverBlobsEventSource() { }
+        private EmitPackageRegistrationsBlobsEventSource() { }
 
         [Event(
             eventId: 1,
@@ -180,11 +201,36 @@ namespace NuGet.Services.Work.Jobs
             Message = "Stored cursor.")]
         public void StoredCursor() { WriteEvent(7); }
 
+        [Event(
+            eventId: 8,
+            Level = EventLevel.Informational,
+            Opcode = EventOpcode.Start,
+            Task = Tasks.HttpRequest,
+            Message = "{0} {1}")]
+        public void SendingHttpRequest(string method, string uri) { WriteEvent(8, method, uri); }
+
+        [Event(
+            eventId: 9,
+            Level = EventLevel.Informational,
+            Opcode = EventOpcode.Stop,
+            Task = Tasks.HttpRequest,
+            Message = "{0} {1}")]
+        public void ReceivedHttpResponse(int statusCode, string uri) { WriteEvent(9, statusCode, uri); }
+
+        [Event(
+            eventId: 10,
+            Level = EventLevel.Informational,
+            Opcode = EventOpcode.Stop,
+            Task = Tasks.HttpRequest,
+            Message = "{0} {1}")]
+        public void HttpException(string uri, string exception) { WriteEvent(10, uri, exception); }
+
         public static class Tasks
         {
             public const EventTask EmitResolverBlobs = (EventTask)0x1;
             public const EventTask LoadingCursor = (EventTask)0x2;
             public const EventTask StoringCursor = (EventTask)0x3;
+            public const EventTask HttpRequest = (EventTask)0x4;
         }
     }
 }
