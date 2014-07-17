@@ -137,8 +137,15 @@ namespace NuGet.Services.Work.Monitoring
 
         private Task UploadLog()
         {
-            // Upload the file to blob storage
-            return _targetBlob.UploadFromFileAsync(_tempFile, FileMode.Open);
+            if (File.Exists(_tempFile))
+            {
+                // Upload the file to blob storage
+                return _targetBlob.UploadFromFileAsync(_tempFile, FileMode.Open);
+            }
+            else
+            {
+                return Task.FromResult(0);
+            }
         }
 
         public override async Task<Uri> End()
