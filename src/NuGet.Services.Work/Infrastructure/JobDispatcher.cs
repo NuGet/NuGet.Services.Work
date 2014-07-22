@@ -16,7 +16,8 @@ namespace NuGet.Services.Work
         private List<JobDescription> _jobs;
         private ILifetimeScope _container;
 
-        private JobDescription _currentJob = null;
+        private volatile JobDescription _currentJob = null;
+        private volatile JobDescription _lastJob = null;
 
         public IReadOnlyList<JobDescription> Jobs { get { return _jobs.AsReadOnly(); } }
 
@@ -37,7 +38,7 @@ namespace NuGet.Services.Work
             {
                 throw new UnknownJobException(context.Invocation.Job);
             }
-            Interlocked.Exchange(ref _currentJob, jobdef);
+            _currentJob = jobdef;
 
             ILifetimeScope scope = null;
             using (scope = _container.BeginLifetimeScope(b =>
@@ -78,7 +79,8 @@ namespace NuGet.Services.Work
                 {
                     result = InvocationResult.Faulted(ex);
                 }
-                Interlocked.Exchange(ref _currentJob, null);
+                _currentJob = null;
+                _lastJob = jobdef;
                 return result;
             }
         }
@@ -86,6 +88,11 @@ namespace NuGet.Services.Work
         public JobDescription GetCurrentJob()
         {
             return _currentJob;
+        }
+
+        public JobDescription GetLastJob()
+        {
+            return _lastJob;
         }
     }
 }

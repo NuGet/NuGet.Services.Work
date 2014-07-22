@@ -23,9 +23,10 @@ namespace NuGet.Services.Work
         public static readonly TimeSpan DefaultInvisibilityPeriod = TimeSpan.FromMinutes(30);
 
         private TimeSpan _pollInterval;
-        private RunnerStatus _status;
 
-        private byte[] _currentInvocationId = Guid.Empty.ToByteArray();
+        private volatile RunnerStatus _status;
+        private volatile byte[] _currentInvocationId = Guid.Empty.ToByteArray();
+        private volatile byte[] _lastInvocationId = Guid.Empty.ToByteArray();
 
         private CloudBlobContainer _logContainer;
 
@@ -64,10 +65,15 @@ namespace NuGet.Services.Work
 
         public Task<object> GetCurrentStatus()
         {
+            // Capture current invocation to avoid races
+            var currentInvocationId = _currentInvocationId;
+            var lastInvocationId = _lastInvocationId;
             return Task.FromResult<object>(new WorkServiceStatus(
                 _status,
-                new Guid(_currentInvocationId),
-                Dispatcher.GetCurrentJob()));
+                currentInvocationId == null ? Guid.Empty : new Guid(currentInvocationId),
+                lastInvocationId == null ? Guid.Empty : new Guid(lastInvocationId),
+                Dispatcher.GetCurrentJob(),
+                Dispatcher.GetLastJob()));
         }
 
         public virtual async Task Run(CancellationToken cancelToken)
@@ -111,7 +117,7 @@ namespace NuGet.Services.Work
                     else
                     {
                         Status = RunnerStatus.Dispatching;
-                        Interlocked.Exchange(ref _currentInvocationId, invocation.Id.ToByteArray());
+                        _currentInvocationId = invocation.Id.ToByteArray();
                         
                         Exception dispatchError = null;
                         try
@@ -130,7 +136,8 @@ namespace NuGet.Services.Work
                                 dispatchError.ToString(),
                                 null);
                         }
-                        Interlocked.Exchange(ref _currentInvocationId, Guid.Empty.ToByteArray());
+                        _currentInvocationId = null;
+                        _lastInvocationId = invocation.Id.ToByteArray();
                         Status = RunnerStatus.Working;
                     }
                 }

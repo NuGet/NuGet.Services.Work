@@ -13,12 +13,16 @@ namespace NuGet.Services.Work
         public RunnerStatus RunnerStatus { get; private set; }
         public Guid CurrentInvocationId { get; private set; }
         public JobDescription CurrentJob { get; private set; }
+        public Guid LastInvocationId { get; private set; }
+        public JobDescription LastJob { get; private set; }
 
-        public WorkServiceStatus(RunnerStatus runnerStatus, Guid currentInvocationId, JobDescription currentJob)
+        public WorkServiceStatus(RunnerStatus runnerStatus, Guid currentInvocationId, Guid lastInvocationId, JobDescription currentJob, JobDescription lastJob)
         {
             RunnerStatus = runnerStatus;
             CurrentInvocationId = currentInvocationId;
+            LastInvocationId = lastInvocationId;
             CurrentJob = currentJob;
+            LastJob = lastJob;
         }
     }
 
