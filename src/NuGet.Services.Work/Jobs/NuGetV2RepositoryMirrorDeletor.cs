@@ -21,33 +21,24 @@ namespace NuGet.Services.Work.Jobs
         {
             public const string IdKey = "id";
             public const string VersionKey = "version";
-            public const string SourcePublishedKey = "sourcePublished";
-            public const string DeletedKey = "deleted";
+            public const string SourceCreatedKey = "sourceCreated";
             public string Id { get; set; }
-            public SemanticVersion Version { get; set; }
-            public DateTime SourcePublished { get; set; }
-            public DateTime? Deleted { get; set; }
+            public SemanticVersion SemanticVersion { get; set; }
+            public DateTime SourceCreated { get; set; }
             public JObject SourceJObject { get; set; }
 
             public int CompareTo(MinPackage other)
             {
-                return this.SourcePublished.CompareTo(other.SourcePublished);
+                return this.SourceCreated.CompareTo(other.SourceCreated);
             }
 
             public static MinPackage GetMinPackage(JObject jObject)
             {
                 var minPackage = new MinPackage();
                 minPackage.Id = jObject[IdKey].ToString();
-                minPackage.Version = new SemanticVersion(jObject[VersionKey].ToString());
-                var sourcePublished = jObject[SourcePublishedKey].Value<DateTime>();
-                minPackage.SourcePublished = new DateTime(sourcePublished.Ticks, DateTimeKind.Utc);
-
-                var deletedToken = jObject[DeletedKey];
-                if (deletedToken != null)
-                {
-                    var deleted = jObject[DeletedKey].Value<DateTime>();
-                    minPackage.Deleted = new DateTime(deleted.Ticks, DateTimeKind.Utc);
-                }
+                minPackage.SemanticVersion = new SemanticVersion(jObject[VersionKey].ToString());
+                var sourceCreated = jObject[SourceCreatedKey].Value<DateTime>();
+                minPackage.SourceCreated = new DateTime(sourceCreated.Ticks, DateTimeKind.Utc);
 
                 minPackage.SourceJObject = jObject;
                 return minPackage;
@@ -55,13 +46,21 @@ namespace NuGet.Services.Work.Jobs
 
             public override string ToString()
             {
-                const string stringFormat = "{0}/{1}/{2}/{3}";
-                const string nullString = "NULL";
-                return String.Format(stringFormat, Id, Version.ToString(), SourcePublished.ToString("O"), Deleted.HasValue ? Deleted.Value.ToString("O") : nullString);
+                const string stringFormat = "{0}/{1}/{2}";
+                return String.Format(stringFormat, Id, SemanticVersion.ToString(), SourceCreated.ToString("O"));
+            }
+
+            public static bool Equals(MinPackage mp, DataServicePackageWithCreated dp)
+            {
+                return mp.SourceCreated.Equals(dp.Created.Value.DateTime) && mp.SemanticVersion.Equals(dp.SemanticVersion) && String.Equals(mp.Id, dp.Id, StringComparison.OrdinalIgnoreCase);
             }
         }
+        public const string LastCreatedKey = "lastCreated";
         public const string PackageIndexKey = "packageIndex";
-        private const string CountDateTimeRangeFormat = "Packages/$count/?$filter=Published ge DateTime'{0}' and Published lt DateTime'{1}'&$orderby=Published";
+        public const string DeletedKey = "deleted";
+        public const string ListedKey = "listed";
+        private const string CountDateTimeRangeFormat = "Packages/$count/?$filter=Created ge DateTime'{0}' and Created lt DateTime'{1}'&$orderby=Created";
+        private static readonly string UnlistedPackagesQueryOption = "Published eq DateTime'" + DataServicePackageWithCreated.UnlistedPublishedUtc.ToString("O") + "' and Created le DateTime'{0}'";
 
         private static int GetPackagesCount(Uri v2Feed, DateTime start, DateTime end)
         {
@@ -83,14 +82,14 @@ namespace NuGet.Services.Work.Jobs
                 MergeOption = DataServices.MergeOption.OverwriteChanges,
                 IgnoreMissingProperties = true,
             };
-            var packagesQuery = serviceContext.CreateQuery<DataServicePackage>("Packages");
-            var queryOptionValue = String.Format("Published eq DateTime'{0}'", dateTime.ToString("o"));
+            var packagesQuery = serviceContext.CreateQuery<DataServicePackageWithCreated>("Packages");
+            var queryOptionValue = String.Format("Created eq DateTime'{0}'", dateTime.ToString("o"));
             packagesQuery = packagesQuery.AddQueryOption("$orderby", "Id");
             packagesQuery = packagesQuery.AddQueryOption("$orderby", "Version");
             packagesQuery = packagesQuery.AddQueryOption("$filter", queryOptionValue);
 
             var skipIndex = 0;
-            var sourcePackages = new List<DataServicePackage>();
+            var sourcePackages = new List<DataServicePackageWithCreated>();
             do
             {
                 var list = packagesQuery.Skip(skipIndex).ToList();
@@ -109,7 +108,7 @@ namespace NuGet.Services.Work.Jobs
             for(int i = startIndex; i < endIndex; i++)
             {
                 var destPackage = destinationPackages[i];
-                var destPackageInSource = sourcePackages.Where(s => String.Equals(s.Id, destPackage.Id) && s.Version.Equals(destPackage.Version)).SingleOrDefault();
+                var destPackageInSource = sourcePackages.Where(s => String.Equals(s.Id, destPackage.Id) && s.SemanticVersion.Equals(destPackage.SemanticVersion)).SingleOrDefault();
                 if(destPackageInSource == null)
                 {
                     // This destination package is not present in source
@@ -123,13 +122,13 @@ namespace NuGet.Services.Work.Jobs
 
         private static List<int> GetDeletedPackageIndices(Uri sourceUri, List<MinPackage> destinationPackages, int startIndex, int endIndex)
         {
-            // Set 'start' as the SourcePublished of destination package at 'startIndex'
-            var start = destinationPackages[startIndex].SourcePublished;
+            // Set 'start' as the SourceCreated of destination package at 'startIndex'
+            var start = destinationPackages[startIndex].SourceCreated;
 
-            // Search is (>= start && < end), in OData words (Packages/$count/?$filter=Published ge DateTime'{0}' and Published lt DateTime'{1}')
-            // So, set end to SourcePublished of destination package at 'endIndex'. This ensures that the result from the source has a package
+            // Search is (>= start && < end), in OData words (Packages/$count/?$filter=Created ge DateTime'{0}' and Created lt DateTime'{1}')
+            // So, set end to SourceCreated of destination package at 'endIndex'. This ensures that the result from the source has a package
             // corresponding to package at 'endIndex - 1'. package at 'startIndex' is accounted for since search is >= start
-            var end = endIndex != destinationPackages.Count ? destinationPackages[endIndex].SourcePublished : destinationPackages[endIndex - 1].SourcePublished.AddSeconds(1);
+            var end = endIndex != destinationPackages.Count ? destinationPackages[endIndex].SourceCreated : destinationPackages[endIndex - 1].SourceCreated.AddSeconds(1);
 
             var EmptyPackages = new List<int>();
             if (start > end)
@@ -143,22 +142,22 @@ namespace NuGet.Services.Work.Jobs
                 return GetDeletedPackageIndices(sourceUri, destinationPackages, startIndex, endIndex, start);
             }
 
-            var leftCount = GetPackagesCount(sourceUri, start, end);
-            var rightCount = endIndex - startIndex;
+            var srcCount = GetPackagesCount(sourceUri, start, end);
+            var destCount = endIndex - startIndex;
 
-            if (leftCount == rightCount)
+            if (srcCount == destCount)
             {
                 return EmptyPackages;
             }
 
-            if (rightCount < leftCount)
+            if (destCount < srcCount)
             {
-                throw new InvalidOperationException("leftCount cannot be greater than rightCount. That should mean some packages are not mirrored yet");
+                throw new InvalidOperationException("srcCount cannot be greater than destCount. That should mean some packages are not mirrored yet");
             }
 
-            if (leftCount == 0)
+            if (srcCount == 0)
             {
-                // return rightOnlyPackages
+                // return destOnlyPackages
                 var list = new List<int>();
                 for(int i = startIndex; i < endIndex; i++)
                 {
@@ -168,11 +167,11 @@ namespace NuGet.Services.Work.Jobs
                 return list;
             }
 
-            var diffCount = rightCount - leftCount;
+            var diffCount = destCount - srcCount;
             NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.DiffCountBetween(start.ToString("O"), end.ToString("O"), diffCount);
 
             var midIndex = (startIndex + endIndex) / 2;
-            var mid = destinationPackages[midIndex].SourcePublished;
+            var mid = destinationPackages[midIndex].SourceCreated;
 
             var left = GetDeletedPackageIndices(sourceUri, destinationPackages, startIndex, midIndex);
             var right = GetDeletedPackageIndices(sourceUri, destinationPackages, midIndex, endIndex);
@@ -202,7 +201,8 @@ namespace NuGet.Services.Work.Jobs
                 if (jObject != null)
                 {
                     var minPackage = MinPackage.GetMinPackage(jObject);
-                    if (!ignoreDeleted || !minPackage.Deleted.HasValue)
+                    var deletedToken = jObject[DeletedKey];
+                    if (!ignoreDeleted || deletedToken == null)
                     {
                         list.Add(minPackage);
                     }
@@ -213,10 +213,8 @@ namespace NuGet.Services.Work.Jobs
             return list;
         }
 
-        private static List<MinPackage> GetDeletedPackages(Uri sourceUri, JObject mirrorJson)
+        private static List<MinPackage> GetDeletedPackages(Uri sourceUri, List<MinPackage> destinationPackages)
         {
-            var destinationPackages = GetSortedMinPackages(mirrorJson, ignoreDeleted: true);
-
             if (destinationPackages.Count == 0)
             {
                 return destinationPackages;
@@ -233,6 +231,107 @@ namespace NuGet.Services.Work.Jobs
             return list;
         }
 
+        private static async Task DeletePackages(Uri sourceUri, CloudStorageAccount account, SqlConnectionStringBuilder cstr, List<MinPackage> destinationPackages)
+        {
+            var minPackagesToBeDeleted = GetDeletedPackages(sourceUri, destinationPackages);
+            NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.TotalNumberOfPackagesToBeDeleted(minPackagesToBeDeleted.Count);
+            using (var connection = new SqlConnection(cstr.ConnectionString))
+            {
+                await connection.OpenAsync();
+                foreach (var minPackage in minPackagesToBeDeleted)
+                {
+                    await DeletePackage(connection, account, minPackage.SourceJObject, minPackage.Id, minPackage.SemanticVersion.ToString());
+                }
+            }
+        }
+
+        private static async Task SetListedPackages(Uri sourceUri, SqlConnectionStringBuilder cstr, List<MinPackage> destinationPackages, DateTime lastCreated)
+        {
+            var unlistedDataServicePackagesInSource = GetUnlistedPackages(sourceUri, lastCreated);
+            NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.SourceUnlistedPackagesCount(unlistedDataServicePackagesInSource.Count);
+            var unlistedMinPackagesInDestination = destinationPackages.Where(p => !p.SourceJObject.Value<bool>(ListedKey)).ToList();
+            NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.DestinationUnlistedPackagesCount(unlistedMinPackagesInDestination.Count);
+            List<MinPackage> unlistedMinPackagesInSource = new List<MinPackage>();
+
+            foreach (var dataServicePackageWithCreated in unlistedDataServicePackagesInSource)
+            {
+                if (dataServicePackageWithCreated.IsListed)
+                {
+                    throw new InvalidOperationException("Package returned as unlisted from the source is listed. WRONG!");
+                }
+                var minPackage = destinationPackages.Where(mp => MinPackage.Equals(mp, dataServicePackageWithCreated)).SingleOrDefault();
+                if (minPackage != null)
+                {
+                    unlistedMinPackagesInSource.Add(minPackage);
+                }
+            }
+
+            var packagesToBeListedInDestination = unlistedMinPackagesInDestination.Where(p => !unlistedMinPackagesInSource.Contains(p)).ToList();
+            NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.PackagesToBeListedCount(packagesToBeListedInDestination.Count);
+            var packagesToBeUnlistedInDestination = unlistedMinPackagesInSource.Where(p => !unlistedMinPackagesInDestination.Contains(p)).ToList();
+            NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.PackagesToBeUnlistedCount(packagesToBeUnlistedInDestination.Count);
+
+            using(var connection = new SqlConnection(cstr.ConnectionString))
+            {
+                await connection.OpenAsync();
+                // Set packages as listed
+                foreach(var listedPackage in packagesToBeListedInDestination)
+                {
+                    await SetListed(connection, listedPackage.SourceJObject, listedPackage.Id, listedPackage.SemanticVersion.ToString(), isListed: true);
+                }
+
+                // Set packages as unlisted
+                foreach(var unlistedPackage in packagesToBeUnlistedInDestination)
+                {
+                    await SetListed(connection, unlistedPackage.SourceJObject, unlistedPackage.Id, unlistedPackage.SemanticVersion.ToString(), isListed: false);
+                }
+            }
+        }
+
+        private static List<DataServicePackageWithCreated> GetUnlistedPackages(Uri sourceUri, DateTime lastCreated)
+        {
+            var serviceContext = new DataServices.DataServiceContext(sourceUri)
+            {
+                MergeOption = DataServices.MergeOption.OverwriteChanges,
+                IgnoreMissingProperties = true,
+            };
+
+            int skipIndex = 0;
+            var unlistedPackages = GetUnlistedPackages(serviceContext, lastCreated);
+            var allUnlistedPackagesList = new List<DataServicePackageWithCreated>();
+
+            do
+            {
+                var unlistedPackagesList = unlistedPackages.Skip(skipIndex).ToList();
+                if (unlistedPackagesList.Count == 0)
+                {
+                    break;
+                }
+
+                allUnlistedPackagesList.AddRange(unlistedPackagesList);
+                skipIndex = skipIndex + unlistedPackagesList.Count;
+            } while (true);
+
+            return allUnlistedPackagesList;
+        }
+
+        private static DataServices.DataServiceQuery<DataServicePackageWithCreated> GetUnlistedPackages(DataServices.DataServiceContext serviceContext, DateTime lastCreated)
+        {
+            var packagesQuery = serviceContext.CreateQuery<DataServicePackageWithCreated>("Packages");
+            // The following query gets unlisted packages created on or before 'lastCreated'
+            var queryOptionValue = String.Format(UnlistedPackagesQueryOption, lastCreated.ToString("O"));
+            packagesQuery = packagesQuery.AddQueryOption("$orderby", "Created, Id, Version");
+            packagesQuery = packagesQuery.AddQueryOption("$filter", queryOptionValue);
+            return packagesQuery;
+        }
+
+        private static async Task SetListed(SqlConnection connection, JObject sourceJObject, string id, string version, bool isListed)
+        {
+            NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.SetListed(id, version, isListed ? "listed" : "unlisted");
+            await PackageDeletor.SetListed(connection, id, version, isListed);
+            sourceJObject[ListedKey] = isListed;
+        }
+
         public static async Task DeletePackage(SqlConnectionStringBuilder cstr, CloudStorageAccount account, JObject sourceJObject, string id, string version)
         {
             using (var connection = new SqlConnection(cstr.ConnectionString))
@@ -244,28 +343,37 @@ namespace NuGet.Services.Work.Jobs
 
         public static async Task DeletePackage(SqlConnection connection, CloudStorageAccount account, JObject sourceJObject, string id, string version)
         {
-            var dynamicPackages = await PackageDeletor.GetDeletePackages(connection, id, version, allVersions: false);
-            foreach (var dynamicPackage in dynamicPackages)
+            var dynamicPackages = await PackageDeletor.GetDeletePackages(connection, id, version);
+            if(!dynamicPackages.IsEmpty())
             {
+                var dynamicPackage = dynamicPackages.Single();
                 NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.DeletingPackage(sourceJObject.ToString());
                 await PackageDeletor.DeletePackage(dynamicPackage, connection, account);
                 var deletedTime = DateTime.UtcNow.ToString("O");
-                sourceJObject[MinPackage.DeletedKey] = deletedTime;
+                sourceJObject[DeletedKey] = deletedTime;
                 NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.DeletedPackage(sourceJObject.ToString(), deletedTime);
+                if (await PackageDeletor.DeleteStaleRegistation(connection, dynamicPackage))
+                {
+                    NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.DeletedStaleRegistration(dynamicPackage.Id);
+                }
             }
         }
 
-        public static async Task DeletePackages(Uri sourceUri, JObject mirrorJson, CloudStorageAccount account, SqlConnectionStringBuilder cstr)
+        public static async Task DeleteAndSetListedPackages(Uri sourceUri, JObject mirrorJson, CloudStorageAccount account, SqlConnectionStringBuilder cstr)
         {
-            var minPackagesToBeDeleted = GetDeletedPackages(sourceUri, mirrorJson);
-            NuGetV2RepositoryMirrorPackageDeletorEventSource.Log.TotalNumberOfPackagesToBeDeleted(minPackagesToBeDeleted.Count);
+            var destinationPackages = GetSortedMinPackages(mirrorJson, ignoreDeleted: true);
+            var lastCreated = mirrorJson.Value<DateTime>(LastCreatedKey);
+
+            await SetListedPackages(sourceUri, cstr, destinationPackages, lastCreated);
+            await DeletePackages(sourceUri, account, cstr, destinationPackages);
+        }
+
+        public static async Task SetListed(SqlConnectionStringBuilder cstr, JObject sourceJObject, string id, string version, bool isListed)
+        {
             using(var connection = new SqlConnection(cstr.ConnectionString))
             {
                 await connection.OpenAsync();
-                foreach(var minPackage in minPackagesToBeDeleted)
-                {
-                    await DeletePackage(connection, account, minPackage.SourceJObject, minPackage.Id, minPackage.Version.ToString());
-                }
+                await SetListed(connection, sourceJObject, id, version, isListed);
             }
         }
     }
@@ -306,5 +414,41 @@ namespace NuGet.Services.Work.Jobs
             Level = EventLevel.Informational,
             Message = "Deleted package {0}. Delete time is {1}")]
         public void DeletedPackage(string package, string deleteTime) { WriteEvent(5, package, deleteTime); }
+
+        [Event(
+            eventId: 6,
+            Level = EventLevel.Informational,
+            Message = "Number of unlisted packages in source: {0}")]
+        public void SourceUnlistedPackagesCount(int unlistedPackagesCount) { WriteEvent(6, unlistedPackagesCount); }
+
+        [Event(
+            eventId: 7,
+            Level = EventLevel.Informational,
+            Message = "Number of unlisted packages in destination: {0}")]
+        public void DestinationUnlistedPackagesCount(int unlistedPackagesCount) { WriteEvent(7, unlistedPackagesCount); }
+
+        [Event(
+            eventId: 8,
+            Level = EventLevel.Informational,
+            Message = "Number of packages to be marked as 'listed' in destination: {0}")]
+        public void PackagesToBeListedCount(int packagesToBeListedCount) { WriteEvent(8, packagesToBeListedCount); }
+
+        [Event(
+            eventId: 9,
+            Level = EventLevel.Informational,
+            Message = "Number of packages to be marked as 'unlisted' in destination: {0}")]
+        public void PackagesToBeUnlistedCount(int packagesToBeUnlistedCount) { WriteEvent(9, packagesToBeUnlistedCount); }
+
+        [Event(
+            eventId: 10,
+            Level = EventLevel.Informational,
+            Message = "Package {0}.{1} was marked as '{2}'")]
+        public void SetListed(string packageId, string version, string listed) { WriteEvent(10, packageId, version, listed); }
+
+        [Event(
+            eventId: 11,
+            Level = EventLevel.Informational,
+            Message = "Stale registration for '{0}' deleted")]
+        public void DeletedStaleRegistration(string packageId) { WriteEvent(11, packageId); }
     }
 }

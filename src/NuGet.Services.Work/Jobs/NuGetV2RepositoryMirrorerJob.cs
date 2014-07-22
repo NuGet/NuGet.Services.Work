@@ -18,6 +18,25 @@ using DataServices = NuGetCoreRef::System.Data.Services.Client;
 
 namespace NuGet.Services.Work.Jobs
 {
+    public class DataServicePackageWithCreated : DataServicePackage
+    {
+        public static readonly DateTime UnlistedPublishedUtc = new DateTime(1900, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        public DateTimeOffset? Created { get; set; }
+        public SemanticVersion SemanticVersion
+        {
+            get
+            {
+                return (this as IPackage).Version;
+            }
+        }
+        public bool IsListed
+        {
+            get
+            {
+                return !Published.Value.DateTime.Equals(UnlistedPublishedUtc);
+            }
+        }
+    }
     /// <summary>
     /// SourceExceptions are thrown when installing a package locally from Source fails
     /// </summary>
@@ -40,11 +59,12 @@ namespace NuGet.Services.Work.Jobs
     public class NuGetV2RepositoryMirrorerJob : JobHandler<NuGetV2RepositoryMirrorerEventSource>
     {
         // Mirror Json Keys
-        public const string LastPublishedKey = "lastPublished";
+        public const string LastCreatedKey = "lastCreated";
         public const string IdKey = "id";
         public const string VersionKey = "version";
-        public const string SourcePublishedKey = "sourcePublished";
+        public const string SourceCreatedKey = "sourceCreated";
         public const string DeletedKey = "deleted";
+        public const string ListedKey = "listed";
         public const string PackageIndexKey = "packageIndex";
 
         private const string ContentTypeJson = "application/json";
@@ -126,7 +146,7 @@ namespace NuGet.Services.Work.Jobs
             var mirrorJson = await GetJObject(MirrorBlobContainer, MirrorBlobName);
             if (!IsMirrorJsonValid(mirrorJson))
             {
-                throw new InvalidOperationException("mirrorJson is not valid. Either packageIndex array is not present. Or, the elements are not sorted by SourcePublishedDate");
+                throw new InvalidOperationException("mirrorJson is not valid. Either packageIndex array is not present. Or, the elements are not sorted by SourceCreatedDate");
             }
 
             Exception caughtException = null;
@@ -135,7 +155,7 @@ namespace NuGet.Services.Work.Jobs
             {
                 try
                 {
-                    await NuGetV2RepositoryMirrorPackageDeletor.DeletePackages(sourceUri, mirrorJson, account, cstr);
+                    await NuGetV2RepositoryMirrorPackageDeletor.DeleteAndSetListedPackages(sourceUri, mirrorJson, account, cstr);
                 }
                 catch (Exception ex)
                 {
@@ -149,9 +169,9 @@ namespace NuGet.Services.Work.Jobs
                 return;
             }
 
-            var oldLastPublished = mirrorJson.Value<DateTime>(LastPublishedKey);
-            var lastPublished = oldLastPublished;
-            Log.PreparingToMirror(MirrorBlobName, lastPublished.ToString(DateTimeFormatSpecifier), lastPublished.Kind.ToString(), sourceUri.AbsoluteUri, DestinationUri);
+            var oldLastCreated = mirrorJson.Value<DateTime>(LastCreatedKey);
+            var lastCreated = oldLastCreated;
+            Log.PreparingToMirror(MirrorBlobName, lastCreated.ToString(DateTimeFormatSpecifier), lastCreated.Kind.ToString(), sourceUri.AbsoluteUri, DestinationUri);
 
             int retries = 0;
             int count = 0;
@@ -166,16 +186,32 @@ namespace NuGet.Services.Work.Jobs
             //	KNOWN ERRORS
             //	1) '409 Conflict' from Destination- Package already exists in destination
             //		i)  Action: (A). Always Skip to next package
-            //      ii) Before skipping, Update lastMirroredPackage.Published locally, i.e inside the while loop
+            //      ii) Before skipping, Update lastMirroredPackage.Created locally, i.e inside the while loop
             //	2) '403 Forbidden' from Source. For reasons unknown, certain listed packages are not available for download. Source returns "Access Denied"
             //      i)  Action: (B). Retry 'MaxRetries' times and Skip to next package
-            //      ii) Log every retry. Before skipping, Update lastMirroredPackage.Published locally, i.e inside the while loop
+            //      ii) Log every retry. Before skipping, Update lastMirroredPackage.Created locally, i.e inside the while loop
             //  3) '404 Not Found' from Source. Package is available on the feed but not available for download already
             //      i)  Action: (C). Retry 'MaxRetries' times and Fail
-            //      ii) Log every retry. Update lastMirroredPackage.Published in blob storage
+            //      ii) Log every retry. Update lastMirroredPackage.Created in blob storage
             //	4) Unknown Error
             //      i)  Action: (C). Retry 'MaxRetries' times and Fail
-            //      ii) Log every retry. Update lastMirroredPackage.Published in blob storage
+            //      ii) Log every retry. Update lastMirroredPackage.Created in blob storage
+            //
+            // Test Cases
+            // 1) Add a new package to the source. COVERED
+            //	  Result: The new package should be present on the destination
+            // 2) Add a package as unlisted to the source. COVERED
+            //	  Result: The new package should be present on the destination as unlisted
+            // 3) Delete a package version from the source. COVERED
+            //	  Result: The package should be deleted from the destination
+            // 4) Delete a package version from the source which is the last version with the package Id. NOT COVERED
+            //	  Result: The package should be deleted from the destination. And, PackageRegistration should be deleted too as appropriate
+            // 5) Delete a package version from the source. And, add a new package with same Id and version as the deleted one. COVERED
+            //	  Result: Old package with Id and version must be deleted from the destination. And, the new package with the same Id and Version must be added
+            // 6) Mark a listed package as unlisted. COVERED
+            //	  Result: The package should be unlisted in the destination too
+            // 7) Mark an unlisted package as listed. COVERED
+            //	  Result: The package should be listed in the destination too
             //
             try
             {
@@ -192,21 +228,21 @@ namespace NuGet.Services.Work.Jobs
                     // In each query, at most, 40 packages may be returned. So, continue performing the queries
                     // in this do-while, so long as there are results returned
 
-                    // Query for packages published since oldLastPublished
+                    // Query for packages created since oldLastCreated
                     PackageServer destinationServer = new PackageServer(DestinationUri, UserAgent);
 
-                    var lastMirroredPackage = QueryAndMirrorBatch(serviceContext, destinationServer, oldLastPublished, ApiKey, timeOutPerPush.Milliseconds, mirrorJson, ref retries, ref count, ref skipIndex, cstr, account);
+                    var lastMirroredPackage = QueryAndMirrorBatch(serviceContext, destinationServer, oldLastCreated, ApiKey, timeOutPerPush.Milliseconds, mirrorJson, ref retries, ref count, ref skipIndex, cstr, account);
                     if (lastMirroredPackage != null)
                     {
-                        if (!lastMirroredPackage.Published.HasValue)
+                        if (!lastMirroredPackage.Created.HasValue)
                         {
-                            throw new InvalidOperationException("Last mirrored package : " + lastMirroredPackage.ToString() + "has a null Published Time.. WRONG!!!");
+                            throw new InvalidOperationException("Last mirrored package : " + lastMirroredPackage.ToString() + "has a null Created Time.. WRONG!!!");
                         }
 
-                        // Note that the Published DateTime is always stored in UTC, but the DateTimeKind of the value obtained is Unspecified
+                        // Note that the Created DateTime is always stored in UTC, but the DateTimeKind of the value obtained is Unspecified
                         // So, store it as UTC
-                        lastPublished = new DateTime(lastMirroredPackage.Published.Value.DateTime.Ticks, DateTimeKind.Utc);
-                        Log.EndOfIteration(lastPublished.ToString(DateTimeFormatSpecifier));
+                        lastCreated = new DateTime(lastMirroredPackage.Created.Value.DateTime.Ticks, DateTimeKind.Utc);
+                        Log.EndOfIteration(lastCreated.ToString(DateTimeFormatSpecifier));
                     }
                     else if (retries == 0 || retries > MaxRetries)
                     {
@@ -216,16 +252,16 @@ namespace NuGet.Services.Work.Jobs
             }
             catch (Exception ex)
             {
-                // Catch the exception here so that new lastPublished is always stored
+                // Catch the exception here so that new lastCreated is always stored
                 // We can throw this exception at the end
                 caughtException = ex;
             }
 
-            if (!oldLastPublished.Equals(lastPublished))
+            if (!oldLastCreated.Equals(lastCreated))
             {
-                mirrorJson[LastPublishedKey] = lastPublished.ToString(DateTimeFormatSpecifier);
+                mirrorJson[LastCreatedKey] = lastCreated.ToString(DateTimeFormatSpecifier);
                 await SetJObject(MirrorBlobContainer, MirrorBlobName, mirrorJson);
-                Log.NewLastPublishedAtEndOfInvocation(MirrorBlobName, lastPublished.ToString(DateTimeFormatSpecifier), lastPublished.Kind.ToString());
+                Log.NewLastCreatedAtEndOfInvocation(MirrorBlobName, lastCreated.ToString(DateTimeFormatSpecifier), lastCreated.Kind.ToString());
             }
 
             if (caughtException != null)
@@ -234,13 +270,13 @@ namespace NuGet.Services.Work.Jobs
             }
         }
 
-        private DataServices.DataServiceQuery<DataServicePackage> GetNewPackagesToMirror(DataServices.DataServiceContext serviceContext, DateTime lastPublished)
+        private DataServices.DataServiceQuery<DataServicePackageWithCreated> GetNewPackagesToMirror(DataServices.DataServiceContext serviceContext, DateTime lastCreated)
         {
-            Log.QueryNewPackages(serviceContext.BaseUri.AbsoluteUri, lastPublished.ToString(DateTimeFormatSpecifier));
-            var packagesQuery = serviceContext.CreateQuery<DataServicePackage>("Packages");
-            // The following query gets packages published after 'lastPublished' and sorted by 'Published' ascending
-            var queryOptionValue = String.Format("Published gt DateTime'{0}'", lastPublished.ToString(DateTimeFormatSpecifier));
-            packagesQuery = packagesQuery.AddQueryOption("$orderby", "Published, Id, Version");
+            Log.QueryNewPackages(serviceContext.BaseUri.AbsoluteUri, lastCreated.ToString(DateTimeFormatSpecifier));
+            var packagesQuery = serviceContext.CreateQuery<DataServicePackageWithCreated>("Packages");
+            // The following query gets packages created after 'lastCreated' and sorted by 'Created' ascending
+            var queryOptionValue = String.Format("Created gt DateTime'{0}'", lastCreated.ToString(DateTimeFormatSpecifier));
+            packagesQuery = packagesQuery.AddQueryOption("$orderby", "Created, Id, Version");
             packagesQuery = packagesQuery.AddQueryOption("$filter", queryOptionValue);
             Log.QueryFilter(queryOptionValue);
             return packagesQuery;
@@ -262,7 +298,7 @@ namespace NuGet.Services.Work.Jobs
         /// Uses OptimizedPackage much like the 'nuget push' command to prevent issues caused by
         /// holding onto package as a stream in memory
         /// </summary>
-        private void MirrorPackage(IPackage package, PackageServer destinationServer, IPackageManager tempPackageManager, LocalPackageRepository tempLocalRepo,
+        private void MirrorPackage(DataServicePackageWithCreated package, PackageServer destinationServer, IPackageManager tempPackageManager, LocalPackageRepository tempLocalRepo,
         string apiKey, int timeOut)
         {
             // Download the package locally into a temp folder. This prevents storing the package in memory
@@ -272,8 +308,8 @@ namespace NuGet.Services.Work.Jobs
 
             try
             {
-                Log.AddingPackageLocally(package.ToString(), package.Published.Value.DateTime.ToString());
-                tempPackageManager.InstallPackage(package.Id, package.Version, ignoreDependencies: true, allowPrereleaseVersions: true);
+                Log.AddingPackageLocally(package.ToString(), package.Created.Value.DateTime.ToString());
+                tempPackageManager.InstallPackage(package.Id, package.SemanticVersion, ignoreDependencies: true, allowPrereleaseVersions: true);
                 Log.AddedPackageLocally(package.ToString());
             }
             catch (Exception ex)
@@ -313,7 +349,7 @@ namespace NuGet.Services.Work.Jobs
             return ((HttpWebResponse)response).StatusCode;
         }
 
-        private void ThrowSourceExceptionIfNeeded(SourceException ex, ref int retries, IPackage package)
+        private void ThrowSourceExceptionIfNeeded(SourceException ex, ref int retries, DataServicePackageWithCreated package)
         {
             // TO BE DELETED
             if(ex.InnerException is PathTooLongException)
@@ -346,7 +382,7 @@ namespace NuGet.Services.Work.Jobs
             }
         }
 
-        private async Task ThrowDestinationExceptionIfNeeded(DestinationException ex, IPackage package, JObject mirrorJson, SqlConnectionStringBuilder cstr, CloudStorageAccount account)
+        private async Task ThrowDestinationExceptionIfNeeded(DestinationException ex, DataServicePackageWithCreated package, JObject mirrorJson, SqlConnectionStringBuilder cstr, CloudStorageAccount account)
         {
             var inner = ex.InnerException;
             HttpStatusCode? code = (inner != null && inner is InvalidOperationException) ? GetHttpStatusCodeFrom(inner.InnerException) : GetHttpStatusCodeFrom(inner);
@@ -360,20 +396,20 @@ namespace NuGet.Services.Work.Jobs
             {
                 // '409 Conflict' from Destination- Package already exists in destination. Don't rethrow
                 case HttpStatusCode.Conflict:
-                    var sourceJObject = GetJObject(mirrorJson, package.Id, package.Version.ToString());
+                    var sourceJObject = GetJObject(mirrorJson, package.Id, package.SemanticVersion);
                     if (sourceJObject == null)
                     {
-                        throw new InvalidOperationException("Package" + package.Id + "//" + package.Version.ToString() + "is already mirrored, but, not present in mirror.json. WRONG!");
+                        throw new InvalidOperationException("Package" + package.Id + "//" + package.SemanticVersion.ToString() + "is already mirrored, but, not present in mirror.json. WRONG!");
                     }
-                    var oldSourcePublished = sourceJObject[SourcePublishedKey].Value<DateTime>();
-                    var newSourcePublished = new DateTime(package.Published.Value.Ticks, DateTimeKind.Utc);
-                    if (!newSourcePublished.Equals(oldSourcePublished))
+                    var oldSourceCreated = sourceJObject[SourceCreatedKey].Value<DateTime>();
+                    var newSourceCreated = new DateTime(package.Created.Value.DateTime.Ticks, DateTimeKind.Utc);
+                    if (!newSourceCreated.Equals(oldSourceCreated))
                     {
-                        // This package while already mirrored to the destination, has been deleted from the source and published again to the source
-                        // Hence, the different SourcePublished Date
+                        // This package while already mirrored to the destination, has been deleted from the source and created again to the source
+                        // Hence, the different SourceCreated Date
                         // Need to delete the package
-                        Log.DeletingOldRevision(package.ToString(), oldSourcePublished.ToString(DateTimeFormatSpecifier), newSourcePublished.ToString(DateTimeFormatSpecifier));
-                        await NuGetV2RepositoryMirrorPackageDeletor.DeletePackage(cstr, account, sourceJObject, package.Id, package.Version.ToString());
+                        Log.DeletingOldRevision(package.ToString(), oldSourceCreated.ToString(DateTimeFormatSpecifier), newSourceCreated.ToString(DateTimeFormatSpecifier));
+                        await NuGetV2RepositoryMirrorPackageDeletor.DeletePackage(cstr, account, sourceJObject, package.Id, package.SemanticVersion.ToString());
                         throw ex;
                     }
                     Log.PackageAlreadyExists(package.ToString());
@@ -385,22 +421,22 @@ namespace NuGet.Services.Work.Jobs
             }
         }
 
-        private static int CompareToSourcePublished(JObject leftJObject, JObject rightJObject)
+        private static int CompareToSourceCreated(JObject leftJObject, JObject rightJObject)
         {
-            var ticks = rightJObject[SourcePublishedKey].Value<DateTime>().Ticks;
-            return CompareToSourcePublished(leftJObject, ticks);
+            var ticks = rightJObject[SourceCreatedKey].Value<DateTime>().Ticks;
+            return CompareToSourceCreated(leftJObject, ticks);
         }
 
-        private static int CompareToSourcePublished(JObject jObject, long sourcePublishedTicks)
+        private static int CompareToSourceCreated(JObject jObject, long sourceCreatedTicks)
         {
-            var sourcePublishedUtc = new DateTime(sourcePublishedTicks, DateTimeKind.Utc);
-            var sourceJObjectSourcePublished = jObject[SourcePublishedKey].Value<DateTime>();
-            return sourceJObjectSourcePublished.CompareTo(sourcePublishedUtc);
+            var sourceCreatedUtc = new DateTime(sourceCreatedTicks, DateTimeKind.Utc);
+            var sourceJObjectSourceCreated = jObject[SourceCreatedKey].Value<DateTime>();
+            return sourceJObjectSourceCreated.CompareTo(sourceCreatedUtc);
         }
-        private static JObject GetJObject(JObject mirrorJson, string id, string version)
+        private static JObject GetJObject(JObject mirrorJson, string id, SemanticVersion version)
         {
             var packageIndex = mirrorJson[PackageIndexKey];
-            return (JObject)packageIndex.Where(s => String.Equals(s[IdKey].ToString(), id, StringComparison.OrdinalIgnoreCase) && String.Equals(s[VersionKey].ToString(), version, StringComparison.OrdinalIgnoreCase)).SingleOrDefault();
+            return (JObject)packageIndex.Where(s => s[DeletedKey] == null && String.Equals(s[IdKey].ToString(), id, StringComparison.OrdinalIgnoreCase) && version.Equals(new SemanticVersion(s[VersionKey].ToString()))).SingleOrDefault();
         }
 
         private static bool IsMirrorJsonValid(JObject mirrorJson)
@@ -417,9 +453,9 @@ namespace NuGet.Services.Work.Jobs
                 {
                     var leftObject = packageIndex[i - 1] as JObject;
                     var rightObject = packageIndex[i] as JObject;
-                    if (leftObject == null || rightObject == null || CompareToSourcePublished(leftObject, rightObject) > 0)
+                    if (leftObject == null || rightObject == null || CompareToSourceCreated(leftObject, rightObject) > 0)
                     {
-                        // If the leftObject or rightObject is null or if SourcePublished of leftObject is greater than rightObject, mirrorJson is not valid
+                        // If the leftObject or rightObject is null or if SourceCreated of leftObject is greater than rightObject, mirrorJson is not valid
                         return false;
                     }
                 }
@@ -427,21 +463,22 @@ namespace NuGet.Services.Work.Jobs
             return true;
         }
 
-        private static JObject GetNewPackage(IPackage package)
+        private static JObject GetNewPackage(DataServicePackageWithCreated package)
         {
             JObject jObject = new JObject();
-            var utcdt = new DateTime(package.Published.Value.Ticks, DateTimeKind.Utc);
-            jObject.Add(SourcePublishedKey, utcdt.ToString(DateTimeFormatSpecifier));
+            var utcdt = new DateTime(package.Created.Value.DateTime.Ticks, DateTimeKind.Utc);
+            jObject.Add(SourceCreatedKey, utcdt.ToString(DateTimeFormatSpecifier));
             jObject.Add(IdKey, package.Id);
-            jObject.Add(VersionKey, package.Version.ToString());
+            jObject.Add(VersionKey, package.SemanticVersion.ToString());
+            jObject.Add(ListedKey, package.IsListed);
             // No need to add Deleted at this point
             return jObject;
         }
 
-        private static void AddNewPackage(JObject mirrorJson, IPackage package)
+        private static JObject AddNewPackage(JObject mirrorJson, DataServicePackageWithCreated package)
         {
-            // TODO: Check for prior existence of the package Id, version and delete the old one if SourceLastPublished is not the same
-            // This logic has to be in the 409 Conflict path
+            // Should Check for prior existence of the package Id, version and delete the old one if SourceLastCreated is not the same
+            // This logic is added in the 409 Conflict path
             var array = mirrorJson[PackageIndexKey] as JArray;
             if (array == null)
             {
@@ -450,23 +487,27 @@ namespace NuGet.Services.Work.Jobs
             var lastItem = array.Count > 0 ? array[array.Count - 1] as JObject : null;
             if(lastItem != null)
             {
-                if (CompareToSourcePublished(lastItem, package.Published.Value.Ticks) > 0)
+                if (CompareToSourceCreated(lastItem, package.Created.Value.DateTime.Ticks) > 0)
                 {
-                    throw new InvalidOperationException("Last package added has a greater SourcePublished Date than the new package being added");
+                    throw new InvalidOperationException("Last package added has a greater SourceCreated Date than the new package being added");
                 }
             }
-            array.Add(GetNewPackage(package));
+
+            var jObject = GetNewPackage(package);
+            array.Add(jObject);
+
+            return jObject;
         }
 
         /// <summary>
-        /// Queries for packages published after 'lastPublished'. At most, 40 packages may be returned
+        /// Queries for packages created after 'lastCreated'. At most, 40 packages may be returned
         /// Mirror that batch of packages to the destination server
         /// </summary>
         /// <returns>Returns lastMirroredPackage or null</returns>
-        private IPackage QueryAndMirrorBatch(DataServices.DataServiceContext serviceContext, PackageServer destinationServer, DateTime lastPublished,
+        private DataServicePackageWithCreated QueryAndMirrorBatch(DataServices.DataServiceContext serviceContext, PackageServer destinationServer, DateTime lastCreated,
         string apiKey, int timeOut, JObject mirrorJson, ref int retries, ref int count, ref int skipIndex, SqlConnectionStringBuilder cstr, CloudStorageAccount account)
         {
-            var newPackages = GetNewPackagesToMirror(serviceContext, lastPublished);
+            var newPackages = GetNewPackagesToMirror(serviceContext, lastCreated);
 
             // Push packages
             var tempFolderPath = GetTempFolderPath(serviceContext.BaseUri.DnsSafeHost);
@@ -475,12 +516,14 @@ namespace NuGet.Services.Work.Jobs
             var tempLocalRepo = new LocalPackageRepository(tempFolderPath);
             var tempPackageManager = new PackageManager(new DataServicePackageRepository(serviceContext.BaseUri), tempFolderPath);
 
-            IPackage currentPackage = null;
-            IPackage lastMirroredPackage = null;
+            DataServicePackageWithCreated currentPackage = null;
+            DataServicePackageWithCreated lastMirroredPackage = null;
             try
             {
                 do
                 {
+                    // The following code deletes the temp folder if one exists and creates a new one
+                    GetTempFolderPath(serviceContext.BaseUri.DnsSafeHost);
                     var newPackagesList = newPackages.Skip(skipIndex).ToList();
                     Log.PackagesCopyCount(newPackagesList.Count);
 
@@ -489,13 +532,18 @@ namespace NuGet.Services.Work.Jobs
                         break;
                     }
 
-                    foreach (IPackage package in newPackagesList)
+                    foreach (DataServicePackageWithCreated package in newPackagesList)
                     {
                         try
                         {
                             currentPackage = package;
                             MirrorPackage(package, destinationServer, tempPackageManager, tempLocalRepo, apiKey, timeOut);
-                            AddNewPackage(mirrorJson, package);
+                            var jObject = AddNewPackage(mirrorJson, package);
+                            if(!package.IsListed)
+                            {
+                                // The new package being pushed is not listed. Mark it as unlisted
+                                NuGetV2RepositoryMirrorPackageDeletor.SetListed(cstr, jObject, package.Id, package.SemanticVersion.ToString(), false).Wait();
+                            }
                             Log.PushedToDestination(++count);
                         }
                         catch (SourceException ex)
@@ -554,27 +602,27 @@ namespace NuGet.Services.Work.Jobs
         [Event(
             eventId: 1,
             Level = EventLevel.Informational,
-            Message = @"lastPublished as retrieved from the lastPublished blob {0} is {1}, DateTimeKind: {2}.
-So, packages will be mirrored from {3} to {4} whose published Date is greater than {1}")]
-        public void PreparingToMirror(string blobName, string lastPublished, string dateTimeKind, string source, string destination) { WriteEvent(1, blobName, lastPublished, dateTimeKind, source, destination); }
+            Message = @"lastCreated as retrieved from the lastCreated blob {0} is {1}, DateTimeKind: {2}.
+So, packages will be mirrored from {3} to {4} whose created Date is greater than {1}")]
+        public void PreparingToMirror(string blobName, string lastCreated, string dateTimeKind, string source, string destination) { WriteEvent(1, blobName, lastCreated, dateTimeKind, source, destination); }
 
         [Event(
             eventId: 2,
             Level = EventLevel.Informational,
-            Message = "New lastPublished : {0}. End of Iteration")]
-        public void EndOfIteration(string lastPublished) { WriteEvent(2, lastPublished); }
+            Message = "New lastCreated : {0}. End of Iteration")]
+        public void EndOfIteration(string lastCreated) { WriteEvent(2, lastCreated); }
 
         [Event(
             eventId: 3,
             Level = EventLevel.Informational,
-            Message = "New LastPublished to be stored in {0} is {1}, DateTimeKind: {2}")]
-        public void NewLastPublishedAtEndOfInvocation(string blobName, string lastPublished, string dateTimeKind) { WriteEvent(3, blobName, lastPublished, dateTimeKind); }
+            Message = "New LastCreated to be stored in {0} is {1}, DateTimeKind: {2}")]
+        public void NewLastCreatedAtEndOfInvocation(string blobName, string lastCreated, string dateTimeKind) { WriteEvent(3, blobName, lastCreated, dateTimeKind); }
 
         [Event(
             eventId: 4,
             Level = EventLevel.Informational,
-            Message = "Querying for packages published to {0} since {1}")]
-        public void QueryNewPackages(string source, string lastPublished) { WriteEvent(4, source, lastPublished); }
+            Message = "Querying for packages created to {0} since {1}")]
+        public void QueryNewPackages(string source, string lastCreated) { WriteEvent(4, source, lastCreated); }
 
         [Event(
             eventId: 5,
@@ -585,8 +633,8 @@ So, packages will be mirrored from {3} to {4} whose published Date is greater th
         [Event(
             eventId: 6,
             Level = EventLevel.Informational,
-            Message = "Adding {0} locally. Published Date in Source : {1}")]
-        public void AddingPackageLocally(string package, string publishedDateInSource) { WriteEvent(6, package, publishedDateInSource); }
+            Message = "Adding {0} locally. Created Date in Source : {1}")]
+        public void AddingPackageLocally(string package, string createdDateInSource) { WriteEvent(6, package, createdDateInSource); }
 
         [Event(
             eventId: 7,
@@ -615,8 +663,8 @@ So, packages will be mirrored from {3} to {4} whose published Date is greater th
         [Event(
             eventId: 11,
             Level = EventLevel.Informational,
-            Message = "Sorted new packages to be mirrored by Published Date in Source")]
-        public void NewPackagesSortedByPublishedDate() { WriteEvent(11); }
+            Message = "Sorted new packages to be mirrored by Created Date in Source")]
+        public void NewPackagesSortedByCreatedDate() { WriteEvent(11); }
 
         [Event(
             eventId: 12,
@@ -663,7 +711,7 @@ So, packages will be mirrored from {3} to {4} whose published Date is greater th
         [Event(
             eventId:19,
             Level=EventLevel.Informational,
-            Message="Package {0} already exists in the mirror, but with an older source published date {1}. Current Source Published Date is {2}. This implies that the package was deleted and added back again. So, deleting the package in the mirror")]
-        public void DeletingOldRevision(string package, string oldSourcePublished, string newSourcePublished) { WriteEvent(19, package, oldSourcePublished, newSourcePublished); }
+            Message="Package {0} already exists in the mirror, but with an older source created date {1}. Current Source Created Date is {2}. This implies that the package was deleted and added back again. So, deleting the package in the mirror")]
+        public void DeletingOldRevision(string package, string oldSourceCreated, string newSourceCreated) { WriteEvent(19, package, oldSourceCreated, newSourceCreated); }
     }
 }
