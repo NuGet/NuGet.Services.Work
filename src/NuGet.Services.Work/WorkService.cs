@@ -124,7 +124,12 @@ namespace NuGet.Services.Work
                     .SingleInstance();
             });
             _scopes.Add(scope);
-            return scope.Resolve<Worker>();
+            var worker = scope.Resolve<Worker>();
+            worker.Runner.Heartbeat += (sender, args) =>
+            {
+                Heartbeat();
+            };
+            return worker;
         }
 
         private void DiscoverJobs()

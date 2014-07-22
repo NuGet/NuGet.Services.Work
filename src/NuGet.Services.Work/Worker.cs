@@ -24,12 +24,9 @@ namespace NuGet.Services.Work
 
         public Task StartAndRun(CancellationToken cancelToken)
         {
-            var task = Task.Factory.StartNew(
-                function: () => Runner.Run(cancelToken),
-                cancellationToken: cancelToken,
-                creationOptions: TaskCreationOptions.LongRunning,
-                scheduler: TaskScheduler.Current);
-            _task = task.Unwrap();
+            _task = Task.Run(
+                () => Runner.Run(cancelToken),
+                cancellationToken: cancelToken);
             return _task;
         }
 

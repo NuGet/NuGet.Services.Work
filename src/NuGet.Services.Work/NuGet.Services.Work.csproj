@@ -51,12 +51,9 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\packages\dotNetRDF.1.0.6-prerelease01\lib\net40\dotNetRDF.dll</HintPath>
     </Reference>
-    <Reference Include="EntityFramework, Version=6.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089, processorArchitecture=MSIL">
+    <Reference Include="EntityFramework, Version=5.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\packages\EntityFramework.6.1.1\lib\net45\EntityFramework.dll</HintPath>
-    </Reference>
-    <Reference Include="EntityFramework.SqlServer">
-      <HintPath>..\..\packages\EntityFramework.6.1.1\lib\net45\EntityFramework.SqlServer.dll</HintPath>
+      <HintPath>..\..\packages\EntityFramework.5.0.0\lib\net45\EntityFramework.dll</HintPath>
     </Reference>
     <Reference Include="HtmlAgilityPack, Version=1.4.6.0, Culture=neutral, PublicKeyToken=bd319b19eaf3b43a, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
@@ -192,27 +189,24 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\packages\NuGet.Core.2.8.2\lib\net40-Client\NuGet.Core.dll</HintPath>
     </Reference>
-    <Reference Include="NuGet.Indexing">
-      <HintPath>..\..\packages\NuGet.Indexing.3.0.29-r-master\lib\net45\NuGet.Indexing.dll</HintPath>
+    <Reference Include="NuGet.Indexing, Version=3.0.33.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\packages\NuGet.Indexing.3.0.33-r-master\lib\net45\NuGet.Indexing.dll</HintPath>
     </Reference>
     <Reference Include="NuGet.Services.Metadata.Catalog, Version=3.0.84.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\packages\NuGet.Services.Metadata.Catalog.3.0.84-r-master\lib\net45\NuGet.Services.Metadata.Catalog.dll</HintPath>
     </Reference>
-    <Reference Include="NuGet.Services.Platform, Version=3.0.27.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="NuGet.Services.Platform, Version=3.0.28.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\packages\NuGet.Services.Platform.3.0.27-r-master\lib\net45\NuGet.Services.Platform.dll</HintPath>
+      <HintPath>..\..\packages\NuGet.Services.Platform.3.0.28-r-master\lib\net45\NuGet.Services.Platform.dll</HintPath>
     </Reference>
-    <Reference Include="NuGet.Services.Platform.Client, Version=3.0.27.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="NuGet.Services.Platform.Client, Version=3.0.28.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\packages\NuGet.Services.Platform.Client.3.0.27-r-master\lib\portable-net45+wp80+win\NuGet.Services.Platform.Client.dll</HintPath>
+      <HintPath>..\..\packages\NuGet.Services.Platform.Client.3.0.28-r-master\lib\portable-net45+wp80+win\NuGet.Services.Platform.Client.dll</HintPath>
     </Reference>
     <Reference Include="NuGet.Versioning">
       <HintPath>..\..\packages\NuGet.Versioning.0.1.0-alpha\lib\portable-net40+win\NuGet.Versioning.dll</HintPath>
-    </Reference>
-    <Reference Include="NuGetGallery.Core, Version=3.0.91.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\packages\NuGetGallery.Core.3.0.91-r-master\lib\net45\NuGetGallery.Core.dll</HintPath>
     </Reference>
     <Reference Include="Owin">
       <HintPath>..\..\packages\Owin.1.0\lib\net40\Owin.dll</HintPath>
@@ -220,6 +214,7 @@
     <Reference Include="System" />
     <Reference Include="System.ComponentModel.DataAnnotations" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Data.Entity" />
     <Reference Include="System.Data.Services.Client">
       <Aliases>NuGetCoreRef</Aliases>
     </Reference>
