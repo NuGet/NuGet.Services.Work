@@ -15,14 +15,16 @@ namespace NuGet.Services.Work
         public JobDescription CurrentJob { get; private set; }
         public Guid LastInvocationId { get; private set; }
         public JobDescription LastJob { get; private set; }
+        public Exception Error { get; private set; }
 
-        public WorkServiceStatus(RunnerStatus runnerStatus, Guid currentInvocationId, Guid lastInvocationId, JobDescription currentJob, JobDescription lastJob)
+        public WorkServiceStatus(RunnerStatus runnerStatus, Guid currentInvocationId, Guid lastInvocationId, JobDescription currentJob, JobDescription lastJob, Exception error)
         {
             RunnerStatus = runnerStatus;
             CurrentInvocationId = currentInvocationId;
             LastInvocationId = lastInvocationId;
             CurrentJob = currentJob;
             LastJob = lastJob;
+            Error = error;
         }
     }
 
@@ -32,6 +34,7 @@ namespace NuGet.Services.Work
         Dequeuing,
         Sleeping,
         Dispatching,
-        Stopping
+        Stopping,
+        Error
     }
 }

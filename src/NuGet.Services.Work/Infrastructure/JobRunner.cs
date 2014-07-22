@@ -27,6 +27,7 @@ namespace NuGet.Services.Work
         private volatile RunnerStatus _status;
         private volatile byte[] _currentInvocationId = Guid.Empty.ToByteArray();
         private volatile byte[] _lastInvocationId = Guid.Empty.ToByteArray();
+        private volatile Exception _error = null;
 
         private CloudBlobContainer _logContainer;
 
@@ -73,7 +74,8 @@ namespace NuGet.Services.Work
                 currentInvocationId == null ? Guid.Empty : new Guid(currentInvocationId),
                 lastInvocationId == null ? Guid.Empty : new Guid(lastInvocationId),
                 Dispatcher.GetCurrentJob(),
-                Dispatcher.GetLastJob()));
+                Dispatcher.GetLastJob(),
+                _error));
         }
 
         public virtual async Task Run(CancellationToken cancelToken)
@@ -146,6 +148,8 @@ namespace NuGet.Services.Work
             catch (Exception ex)
             {
                 WorkServiceEventSource.Log.DispatchLoopError(ex);
+                Status = RunnerStatus.Error;
+                _error = ex;
                 throw;
             }
             WorkServiceEventSource.Log.DispatchLoopEnded();
