@@ -73,6 +73,9 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\packages\EnterpriseLibrary.SemanticLogging.2.0.1406.1\lib\net45\Microsoft.Practices.EnterpriseLibrary.SemanticLogging.dll</HintPath>
     </Reference>
+    <Reference Include="Microsoft.Practices.EnterpriseLibrary.SemanticLogging.TextFile">
+      <HintPath>..\..\packages\EnterpriseLibrary.SemanticLogging.TextFile.2.0.1406.1\lib\net45\Microsoft.Practices.EnterpriseLibrary.SemanticLogging.TextFile.dll</HintPath>
+    </Reference>
     <Reference Include="Microsoft.Practices.EnterpriseLibrary.SemanticLogging.WindowsAzure, Version=2.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\packages\EnterpriseLibrary.SemanticLogging.WindowsAzure.2.0.1406.1\lib\net45\Microsoft.Practices.EnterpriseLibrary.SemanticLogging.WindowsAzure.dll</HintPath>
@@ -115,13 +118,13 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\packages\NuGet.Core.2.8.2\lib\net40-Client\NuGet.Core.dll</HintPath>
     </Reference>
-    <Reference Include="NuGet.Services.Platform, Version=3.0.25.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="NuGet.Services.Platform, Version=3.0.27.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\packages\NuGet.Services.Platform.3.0.25-r-master\lib\net45\NuGet.Services.Platform.dll</HintPath>
+      <HintPath>..\..\packages\NuGet.Services.Platform.3.0.27-r-master\lib\net45\NuGet.Services.Platform.dll</HintPath>
     </Reference>
-    <Reference Include="NuGet.Services.Platform.Client, Version=3.0.25.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="NuGet.Services.Platform.Client, Version=3.0.27.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\packages\NuGet.Services.Platform.Client.3.0.25-r-master\lib\portable-net45+wp80+win\NuGet.Services.Platform.Client.dll</HintPath>
+      <HintPath>..\..\packages\NuGet.Services.Platform.Client.3.0.27-r-master\lib\portable-net45+wp80+win\NuGet.Services.Platform.Client.dll</HintPath>
     </Reference>
     <Reference Include="Owin">
       <HintPath>..\..\packages\Owin.1.0\lib\net40\Owin.dll</HintPath>

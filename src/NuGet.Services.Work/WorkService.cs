@@ -188,5 +188,11 @@ namespace NuGet.Services.Work
             base.ConfigureAttributeRouting(resolver);
             resolver.ConstraintMap.Add("invocationListCriteria", typeof(EnumConstraint<InvocationListCriteria>));
         }
+
+        public override IEnumerable<EventSource> GetEventSources()
+        {
+            yield return WorkServiceEventSource.Log;
+            yield return InvocationEventSource.Log;
+        }
     }
 }
