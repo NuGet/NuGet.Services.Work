@@ -324,7 +324,7 @@ namespace NuGet.Services.Work.Jobs
                 localPackagePath = Path.Combine(localInstallPath, tempLocalRepo.PathResolver.GetPackageFileName(package));
                 localPackage = new OptimizedZipPackage(localPackagePath);
                 Log.PushingPackage(localPackage.ToString());
-                destinationServer.PushPackage(apiKey, localPackage, new FileInfo(localPackagePath).Length, timeOut);
+                destinationServer.PushPackage(apiKey, localPackage, new FileInfo(localPackagePath).Length, timeOut, disableBuffering: false);
             }
             catch (Exception ex)
             {

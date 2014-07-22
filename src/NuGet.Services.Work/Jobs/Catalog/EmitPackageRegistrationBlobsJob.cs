@@ -10,7 +10,6 @@ using System.Text;
 using System.Threading.Tasks;
 
 using Newtonsoft.Json.Linq;
-using NuGet.Services.Storage;
 using Microsoft.WindowsAzure.Storage;
 using NuGet.Services.Work.Monitoring;
 using System.Net.Http;
@@ -96,7 +95,7 @@ namespace NuGet.Services.Work.Jobs
 
             ResolverCollector collector = new ResolverCollector(storage, 200)
             {
-                CdnBaseAddress = CdnBaseAddress,
+                ContentBaseAddress = CdnBaseAddress,
                 GalleryBaseAddress = GalleryBaseAddress
             };
             

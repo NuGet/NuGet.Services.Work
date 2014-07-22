@@ -8,7 +8,6 @@ using Microsoft.WindowsAzure.Storage.Queue;
 using Moq;
 using NuGet.Services.Configuration;
 using NuGet.Services.Work.Monitoring;
-using NuGet.Services.Storage;
 using Xunit;
 using Xunit.Extensions;
 using NuGet.Services.Work.Models;
@@ -389,7 +388,6 @@ namespace NuGet.Services.Work.Infrastructure
 
             public Mock<InvocationQueue> MockQueue { get; private set; }
             public Mock<JobDispatcher> MockDispatcher { get; private set; }
-            public Mock<StorageHub> MockStorage { get; private set; }
             public VirtualClock VirtualClock { get; private set; }
 
             public InvocationState LastDispatched { get; private set; }
@@ -401,7 +399,6 @@ namespace NuGet.Services.Work.Infrastructure
                 // Arrange
                 Queue = (MockQueue = new Mock<InvocationQueue>()).Object;
                 Dispatcher = (MockDispatcher = new Mock<JobDispatcher>()).Object;
-                Storage = (MockStorage = new Mock<StorageHub>()).Object;
                 Clock = VirtualClock = new VirtualClock();
 
                 _skipDispatch = skipDispatch;

@@ -9,7 +9,6 @@ using System.Threading.Tasks;
 using Microsoft.Practices.EnterpriseLibrary.SemanticLogging;
 using Microsoft.Practices.EnterpriseLibrary.SemanticLogging.Formatters;
 using Microsoft.WindowsAzure.Storage.Blob;
-using NuGet.Services.Storage;
 using System.Reactive.Subjects;
 using Microsoft.Practices.EnterpriseLibrary.SemanticLogging.Sinks;
 using System.Threading;
@@ -76,12 +75,12 @@ namespace NuGet.Services.Work.Monitoring
         private string _blobName;
         private CloudBlockBlob _targetBlob;
 
-        public StorageHub Storage { get; private set; }
+        public CloudBlobContainer LogContainer { get; private set; }
 
-        public BlobInvocationLogCapture(InvocationState invocation, StorageHub storage)
+        public BlobInvocationLogCapture(InvocationState invocation, CloudBlobContainer logContainer)
             : base(invocation)
         {
-            Storage = storage;
+            LogContainer = logContainer;
 
             _tempDirectory = Path.Combine(Path.GetTempPath(), "InvocationLogs");
             _blobName = invocation.Id.ToString("N") + ".json";
@@ -106,8 +105,7 @@ namespace NuGet.Services.Work.Monitoring
             }
 
             // Locate the log blob
-            var container = Storage.Primary.Blobs.Client.GetContainerReference(WorkService.InvocationLogsContainerBaseName);
-            _targetBlob = container.GetBlockBlobReference("invocations/" + _blobName);
+            _targetBlob = LogContainer.GetBlockBlobReference("invocations/" + _blobName);
 
             // Fetch the current logs if this is a continuation, we'll append to them during the invocation
             if (Invocation.IsContinuation && await _targetBlob.ExistsAsync())

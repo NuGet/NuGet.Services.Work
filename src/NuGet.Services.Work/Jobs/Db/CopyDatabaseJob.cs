@@ -166,7 +166,6 @@ namespace NuGet.Services.Work.Jobs
                 Log.RenamingExistingCopyTarget(TargetDatabaseName, existingBackupName);
                 await sql.Databases.UpdateAsync(TargetServerName, TargetDatabaseName, new DatabaseUpdateParameters()
                 {
-                    CollationName = existingDb.CollationName,
                     Edition = existingDb.Edition,
                     Name = existingBackupName
                 });
@@ -185,7 +184,6 @@ namespace NuGet.Services.Work.Jobs
                 var restoreDb = await sql.Databases.GetAsync(TargetServerName, CopyName);
                 await sql.Databases.UpdateAsync(TargetServerName, CopyName, new DatabaseUpdateParameters()
                 {
-                    CollationName = restoreDb.Database.CollationName,
                     Edition = restoreDb.Database.Edition,
                     Name = TargetDatabaseName
                 });
@@ -208,7 +206,6 @@ namespace NuGet.Services.Work.Jobs
                     Log.RecoveringExistingCopy(existingBackupName, TargetDatabaseName);
                     await sql.Databases.UpdateAsync(TargetServerName, CopyName, new DatabaseUpdateParameters()
                     {
-                        CollationName = existingDb.CollationName,
                         Edition = existingDb.Edition,
                         Name = TargetDatabaseName
                     });

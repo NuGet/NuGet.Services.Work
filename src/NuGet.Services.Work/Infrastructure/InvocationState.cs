@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 using Microsoft.WindowsAzure.Storage.Queue;
 using Microsoft.WindowsAzure.Storage.Table;
 using Newtonsoft.Json;
-using NuGet.Services.Storage;
 using NuGet.Services.Work.Models;
 
 namespace NuGet.Services.Work

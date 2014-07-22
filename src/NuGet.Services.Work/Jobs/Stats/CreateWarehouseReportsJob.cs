@@ -9,7 +9,6 @@ using Dapper;
 using Microsoft.WindowsAzure.Storage;
 using NuGet.Services.Configuration;
 using Microsoft.WindowsAzure.Storage.Blob;
-using NuGet.Services.Storage;
 using NuGet.Services.Work.Helpers;
 using System.Data;
 using NuGet.Services.Client;

@@ -11,12 +11,12 @@ using System.Threading.Tasks.Dataflow;
 using Dapper;
 using Microsoft.SqlServer.Server;
 using Microsoft.WindowsAzure.Storage;
+using Microsoft.WindowsAzure.Storage.Blob;
 using Microsoft.WindowsAzure.Storage.Queue;
 using Microsoft.WindowsAzure.Storage.Queue.Protocol;
 using Microsoft.WindowsAzure.Storage.Table;
 using NuGet.Services.Configuration;
 using NuGet.Services.ServiceModel;
-using NuGet.Services.Storage;
 using NuGet.Services.Work.Models;
 
 namespace NuGet.Services.Work
@@ -30,18 +30,22 @@ namespace NuGet.Services.Work
         private SqlConnectionStringBuilder _connectionString;
         private string _instanceName;
         private Clock _clock;
-        private StorageHub _storage;
-
+        private CloudBlobContainer _archiveContainer;
+        
         protected InvocationQueue() { }
 
-        public InvocationQueue(Clock clock, string instanceName, StorageHub storage, ConfigurationHub config)
-            : this(clock, instanceName, storage, config.Sql.GetConnectionString(KnownSqlConnection.Primary)) { }
+        public InvocationQueue(Clock clock, string instanceName, ConfigurationHub config)
+            : this(
+                clock, 
+                instanceName, 
+                (config.Storage.Primary == null) ? null : (config.Storage.Primary.CreateCloudBlobClient().GetContainerReference("ng-" + ArchiveContainer)),
+                config.Sql.GetConnectionString(KnownSqlConnection.Primary)) { }
 
-        public InvocationQueue(Clock clock, string instanceName, StorageHub storage, SqlConnectionStringBuilder connectionString)
+        public InvocationQueue(Clock clock, string instanceName, CloudBlobContainer archiveContainer, SqlConnectionStringBuilder connectionString)
             : this()
         {
             _clock = clock;
-            _storage = storage;
+            _archiveContainer = archiveContainer;
             _instanceName = instanceName;
             _connectionString = connectionString;
         }
@@ -422,7 +426,7 @@ namespace NuGet.Services.Work
                     latest.Job,
                     latest.UpdatedAt.ToString("s"),
                     latest.Id.ToString("N").ToLowerInvariant());
-            return _storage.Primary.Blobs.UploadJsonBlob(invocationHistory.ToArray(), ArchiveContainer, name);
+            return _archiveContainer.UploadJsonBlob(name, invocationHistory.ToArray());
         }
 
         private async Task<IEnumerable<InvocationStatisticsRecord>> GetStatisticsCore(string view)

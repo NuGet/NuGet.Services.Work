@@ -18,7 +18,6 @@ using System.Reactive.Disposables;
 using Microsoft.WindowsAzure.Storage.Blob;
 using NuGet.Services.Work.Monitoring;
 using System.Net;
-using NuGet.Services.Storage;
 using NuGet.Services.Work.Configuration;
 using Autofac.Core;
 using Autofac;
@@ -156,7 +155,6 @@ namespace NuGet.Services.Work
                     .UsingConstructor(
                         typeof(Clock),
                         typeof(string),
-                        typeof(StorageHub),
                         typeof(ConfigurationHub))
                     .WithParameter(
                         new NamedParameter("instanceName", ServiceName.ToString() + "#api"));

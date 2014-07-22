@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using Autofac;
 using NuGet.Services.Configuration;
 using NuGet.Services.ServiceModel;
-using NuGet.Services.Storage;
 using NuGet.Services.Work.Monitoring;
 
 namespace NuGet.Services.Work
@@ -44,7 +43,6 @@ namespace NuGet.Services.Work
                     .UsingConstructor(
                         typeof(Clock),
                         typeof(string),
-                        typeof(StorageHub),
                         typeof(ConfigurationHub))
                     .WithParameter(
                         new NamedParameter("instanceName", _instanceName));

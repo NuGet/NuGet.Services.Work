@@ -7,9 +7,10 @@ using System.Threading.Tasks;
 using System.Web.Http;
 using NuGet.Services.Http;
 using NuGet.Services.Work.Api.Models;
-using NuGet.Services.Storage;
 using NuGet.Services.Work.Models;
 using System.Net.Http;
+using NuGet.Services.Configuration;
+using Microsoft.WindowsAzure.Storage.Blob;
 
 namespace NuGet.Services.Work.Api.Controllers
 {
@@ -17,12 +18,21 @@ namespace NuGet.Services.Work.Api.Controllers
     [Authorize(Roles = Roles.Admin)]
     public class InvocationsController : NuGetApiController
     {
-        public StorageHub Storage { get; private set; }
+        public CloudBlobContainer LogContainer { get; private set; }
         public InvocationQueue Queue { get; private set; }
 
-        public InvocationsController(StorageHub storage, InvocationQueue queue)
+        public InvocationsController(ConfigurationHub config, InvocationQueue queue)
+            : this(
+                config.Storage.Primary
+                    .CreateCloudBlobClient()
+                    .GetContainerReference(WorkService.InvocationLogsContainerBaseName), 
+                queue)
         {
-            Storage = storage;
+        }
+
+        public InvocationsController(CloudBlobContainer logContainer, InvocationQueue queue)
+        {
+            LogContainer = logContainer;
             Queue = queue;
         }
 
@@ -49,8 +59,7 @@ namespace NuGet.Services.Work.Api.Controllers
         public async Task<IHttpActionResult> GetInvocationLog(Guid id)
         {
             // Locate the blob
-            var container = Storage.Primary.Blobs.Client.GetContainerReference(WorkService.InvocationLogsContainerBaseName);
-            var blob = container.GetBlockBlobReference("invocations/" + id.ToString("N") + ".json");
+            var blob = LogContainer.GetBlockBlobReference("invocations/" + id.ToString("N") + ".json");
 
             if (!await blob.ExistsAsync())
             {

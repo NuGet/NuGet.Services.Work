@@ -10,22 +10,19 @@ using System.ComponentModel;
 using Microsoft.WindowsAzure.Storage.Table;
 using System.Diagnostics.Tracing;
 using System.ComponentModel.DataAnnotations.Schema;
-using NuGet.Services.Storage;
 using Autofac.Builder;
 
 namespace NuGet.Services.Work
 {
-    [Table("Jobs")]
-    public class JobDescription : AzureTableEntity
+    public class JobDescription
     {
-        public string Name { get { return PartitionKey; } set { PartitionKey = value; } }
+        public string Name { get; private set; }
         public string Description { get; set; }
         public Guid? EventProviderId { get; set; }
         public bool? Enabled { get; set; }
         public string Runtime { get; private set; }
         public AssemblyInformation Assembly { get; private set; }
 
-        [IgnoreProperty]
         public Type Implementation { get; private set; }
         
         [Obsolete("For serialization only")]
@@ -35,8 +32,8 @@ namespace NuGet.Services.Work
             : this(name, null, null, implementation) { }
 
         public JobDescription(string name, string description, Guid? eventProviderId, Type implementation)
-            : base(name, DateTimeOffset.UtcNow)
         {
+            Name = name;
             Description = description;
             EventProviderId = eventProviderId;
             Implementation = implementation;
