@@ -59,6 +59,15 @@ namespace NuGet.Services.Work.Client
             });
         }
 
+        public async Task<ServiceResponse> Purge(string id)
+        {
+            return await Client.DeleteAsync(
+                await FormatQueryString(
+                    "work/invocations/" + id.ToLowerInvariant()))
+                .AsServiceResponse();
+                
+        }
+
         public async Task<ServiceResponse<IEnumerable<Invocation>>> Purge(DateTimeOffset? before)
         {
             return await Client.DeleteAsync(
