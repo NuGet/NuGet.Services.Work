@@ -52,6 +52,10 @@ namespace NuGet.Services.Work
         public static CloudBlobDirectory GetBlobDirectory(CloudStorageAccount account, string path)
         {
             var client = account.CreateCloudBlobClient();
+            client.DefaultRequestOptions = new BlobRequestOptions()
+            {
+                ServerTimeout = TimeSpan.FromMinutes(5)
+            };
 
             string[] segments = path.Split('/');
             string containerName;
