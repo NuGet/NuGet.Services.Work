@@ -15,6 +15,9 @@ namespace NuGet.Services.Work.Jobs
     [Description("Replicates package statistics from the primary database to the warehouse")]
     public class ReplicatePackageStatisticsJob : JobHandler<ReplicatePackageStatisticsEventSource>
     {
+        const int AddDownloadFactCommandTimeout = 180;
+        private static readonly TimeSpan AddDownloadFactCommandMinTimeSpan = TimeSpan.FromSeconds(AddDownloadFactCommandTimeout + 60);
+
         /// <summary>
         /// Gets or sets a connection string to the database containing package data.
         /// </summary>
@@ -34,18 +37,33 @@ namespace NuGet.Services.Work.Jobs
 
         protected internal override async Task Execute()
         {
-            // Load defaults
-            Source = Source ?? Config.Sql.Legacy;
-            Destination = Destination ?? Config.Sql.Warehouse;
+            Exception caught = null;
+            try
+            {
+                // Load defaults
+                Source = Source ?? Config.Sql.Legacy;
+                Destination = Destination ?? Config.Sql.Warehouse;
 
-            Log.ReplicatingStatistics(Source.DataSource, Source.InitialCatalog, Destination.DataSource, Destination.InitialCatalog);
+                Log.ReplicatingStatistics(Source.DataSource, Source.InitialCatalog, Destination.DataSource, Destination.InitialCatalog);
 
-            const int BatchSize = 1000;                 //  number of rows to collect from the source
-            const int ExpectedSourceMaxQueryTime = 5;   //  if the query from the source database takes longer than this we must be busy
-            const int PauseDuration = 10;               //  pause applied when the queries to the source are taking a long time 
+                const int BatchSize = 1000;                 //  number of rows to collect from the source
+                const int ExpectedSourceMaxQueryTime = 5;   //  if the query from the source database takes longer than this we must be busy
+                const int PauseDuration = 10;               //  pause applied when the queries to the source are taking a long time
 
-            var count = await Replicate(BatchSize, ExpectedSourceMaxQueryTime, PauseDuration);
-            Log.ReplicatedStatistics(Source.DataSource, Source.InitialCatalog, Destination.DataSource, Destination.InitialCatalog, count);
+                var count = await Replicate(BatchSize, ExpectedSourceMaxQueryTime, PauseDuration);
+                Log.ReplicatedStatistics(Source.DataSource, Source.InitialCatalog, Destination.DataSource, Destination.InitialCatalog, count);
+            }
+            catch (Exception ex)
+            {
+                caught = ex;
+            }
+
+            await this.Enqueue(this.Invocation.Job, this.Invocation.Payload, TimeSpan.FromMinutes(3));
+
+            if(caught != null)
+            {
+                throw new Exception("Job failed. Check inner exception", caught);
+            }
         }
 
         public static async Task<int> GetLastOriginalKey(SqlConnectionStringBuilder connectionString)
@@ -111,26 +129,42 @@ namespace NuGet.Services.Work.Jobs
             {
                 foreach (DownloadFact fact in batch)
                 {
-                    await connection.QueryAsync<int>(
-                        "AddDownloadFact",
-                        param: new
-                        {
-                            fact.OriginalKey,
-                            fact.PackageId,
-                            fact.PackageVersion,
-                            fact.PackageListed,
-                            fact.PackageTitle,
-                            fact.PackageDescription,
-                            fact.PackageIconUrl,
-                            fact.DownloadUserAgent,
-                            fact.DownloadOperation,
-                            fact.DownloadTimestamp,
-                            fact.DownloadProjectTypes,
-                            fact.DownloadDependentPackageId
-                        },
-                        commandType: CommandType.StoredProcedure);
+                    SqlCommand command = new SqlCommand("AddDownloadFact", connection);
+                    command.CommandTimeout = AddDownloadFactCommandTimeout;
+                    command.CommandType = CommandType.StoredProcedure;
+                    command.Parameters.AddWithValue("@OriginalKey", fact.OriginalKey);
+                    command.Parameters.AddWithValue("@PackageId", GetStringEmtpyIfNull(fact.PackageId));
+                    command.Parameters.AddWithValue("@PackageVersion", GetStringEmtpyIfNull(fact.PackageVersion));
+                    command.Parameters.AddWithValue("@PackageListed", fact.PackageListed);
+                    command.Parameters.AddWithValue("@PackageTitle", GetStringEmtpyIfNull(fact.PackageTitle));
+                    command.Parameters.AddWithValue("@PackageDescription", GetStringEmtpyIfNull(fact.PackageDescription));
+                    command.Parameters.AddWithValue("@PackageIconUrl", GetStringEmtpyIfNull(fact.PackageIconUrl));
+                    command.Parameters.AddWithValue("@DownloadUserAgent", GetStringEmtpyIfNull(fact.DownloadUserAgent));
+                    command.Parameters.AddWithValue("@DownloadOperation", GetStringEmtpyIfNull(fact.DownloadOperation));
+                    command.Parameters.AddWithValue("@DownloadTimestamp", fact.DownloadTimestamp);
+                    command.Parameters.AddWithValue("@DownloadProjectTypes", GetStringEmtpyIfNull(fact.DownloadProjectTypes));
+                    command.Parameters.AddWithValue("@DownloadDependentPackageId", GetStringEmtpyIfNull(fact.DownloadDependentPackageId));
+
+                    var start = DateTime.UtcNow;
+                    if ((Invocation.NextVisibleAt - DateTimeOffset.UtcNow) < AddDownloadFactCommandMinTimeSpan)
+                    {
+                        // Running out of time! Extend the job
+                        // DefaultInvisibilityPeriod is 30 minutes
+                        await Extend(JobRunner.DefaultInvisibilityPeriod);
+                    }
+                    await command.ExecuteNonQueryAsync();
+                    var end = DateTime.UtcNow;
+                    if ((end - start).TotalSeconds > 5)
+                    {
+                        Log.SlowQueryInfo((end - start).TotalSeconds, GetStringEmtpyIfNull(fact.PackageId), GetStringEmtpyIfNull(fact.PackageVersion), GetStringEmtpyIfNull(fact.DownloadUserAgent));
+                    }
                 }
             }
+        }
+
+        private string GetStringEmtpyIfNull(string param)
+        {
+            return String.IsNullOrEmpty(param) ? String.Empty : param;
         }
 
         private async Task<int> Replicate(int batchSize, int expectedSourceMaxQueryTime, int pauseDuration)
@@ -309,6 +343,12 @@ namespace NuGet.Services.Work.Jobs
             Level = EventLevel.Warning,
             Message = "Last replicated key has not changed meaning no data was inserted last run. Stopping")]
         public void LastReplicatedKeyNotChanged() { WriteEvent(9); }
+
+        [Event(
+            eventId: 10,
+            Level = EventLevel.Warning,
+            Message = "Query took longer than 5 seconds and executed in {0} seconds for package '{1}.{2}' with userAgent '{3}'")]
+        public void SlowQueryInfo(double timeSpanSeconds, string packageId, string packageversion, string userAgent) { WriteEvent(10, timeSpanSeconds, packageId, packageversion, userAgent); }
 
         public static class Tasks
         {
