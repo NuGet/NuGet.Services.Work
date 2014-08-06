@@ -124,12 +124,6 @@ namespace NuGet.Services.Work.Jobs
         {
             int commandTimeout = 180;
 
-            if ((Invocation.NextVisibleAt - DateTimeOffset.UtcNow) < TimeSpan.FromSeconds(2 * commandTimeout * batch.Count))
-            {
-                // Running out of time! Extend the job
-                await Extend(TimeSpan.FromSeconds(3 * commandTimeout * batch.Count));
-            }
-
             using (var connection = await Destination.ConnectTo())
             {
                 foreach (DownloadFact fact in batch)
@@ -151,9 +145,15 @@ namespace NuGet.Services.Work.Jobs
                     command.Parameters.AddWithValue("@DownloadDependentPackageId", GetStringEmtpyIfNull(fact.DownloadDependentPackageId));
 
                     var start = DateTime.UtcNow;
+                    if ((Invocation.NextVisibleAt - DateTimeOffset.UtcNow) < TimeSpan.FromSeconds(commandTimeout))
+                    {
+                        // Running out of time! Extend the job
+                        // DefaultInvisibilityPeriod is 30 minutes
+                        await Extend(JobRunner.DefaultInvisibilityPeriod);
+                    }
                     await command.ExecuteNonQueryAsync();
                     var end = DateTime.UtcNow;
-                    if ((end - start) > TimeSpan.FromSeconds(5))
+                    if ((end - start).TotalSeconds > 5)
                     {
                         Log.SlowQueryDuration((end - start).TotalSeconds);
                     }
