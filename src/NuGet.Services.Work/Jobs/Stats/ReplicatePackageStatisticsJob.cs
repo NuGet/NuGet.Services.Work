@@ -107,30 +107,48 @@ namespace NuGet.Services.Work.Jobs
 
         private async Task PutDownloadRecords(List<DownloadFact> batch)
         {
+            int commandTimeout = 180;
+
+            if ((Invocation.NextVisibleAt - DateTimeOffset.UtcNow) < TimeSpan.FromSeconds(2 * commandTimeout * batch.Count))
+            {
+                // Running out of time! Extend the job
+                await Extend(TimeSpan.FromSeconds(3 * commandTimeout * batch.Count));
+            }
+
             using (var connection = await Destination.ConnectTo())
             {
                 foreach (DownloadFact fact in batch)
                 {
-                    await connection.QueryAsync<int>(
-                        "AddDownloadFact",
-                        param: new
-                        {
-                            fact.OriginalKey,
-                            fact.PackageId,
-                            fact.PackageVersion,
-                            fact.PackageListed,
-                            fact.PackageTitle,
-                            fact.PackageDescription,
-                            fact.PackageIconUrl,
-                            fact.DownloadUserAgent,
-                            fact.DownloadOperation,
-                            fact.DownloadTimestamp,
-                            fact.DownloadProjectTypes,
-                            fact.DownloadDependentPackageId
-                        },
-                        commandType: CommandType.StoredProcedure);
+                    SqlCommand command = new SqlCommand("AddDownloadFact", connection);
+                    command.CommandTimeout = commandTimeout;
+                    command.CommandType = CommandType.StoredProcedure;
+                    command.Parameters.AddWithValue("@OriginalKey", fact.OriginalKey);
+                    command.Parameters.AddWithValue("@PackageId", GetStringEmtpyIfNull(fact.PackageId));
+                    command.Parameters.AddWithValue("@PackageVersion", GetStringEmtpyIfNull(fact.PackageVersion));
+                    command.Parameters.AddWithValue("@PackageListed", fact.PackageListed);
+                    command.Parameters.AddWithValue("@PackageTitle", GetStringEmtpyIfNull(fact.PackageTitle));
+                    command.Parameters.AddWithValue("@PackageDescription", GetStringEmtpyIfNull(fact.PackageDescription));
+                    command.Parameters.AddWithValue("@PackageIconUrl", GetStringEmtpyIfNull(fact.PackageIconUrl));
+                    command.Parameters.AddWithValue("@DownloadUserAgent", GetStringEmtpyIfNull(fact.DownloadUserAgent));
+                    command.Parameters.AddWithValue("@DownloadOperation", GetStringEmtpyIfNull(fact.DownloadOperation));
+                    command.Parameters.AddWithValue("@DownloadTimestamp", fact.DownloadTimestamp);
+                    command.Parameters.AddWithValue("@DownloadProjectTypes", GetStringEmtpyIfNull(fact.DownloadProjectTypes));
+                    command.Parameters.AddWithValue("@DownloadDependentPackageId", GetStringEmtpyIfNull(fact.DownloadDependentPackageId));
+
+                    var start = DateTime.UtcNow;
+                    await command.ExecuteNonQueryAsync();
+                    var end = DateTime.UtcNow;
+                    if ((end - start) > TimeSpan.FromSeconds(5))
+                    {
+                        Log.SlowQueryDuration((end - start).TotalSeconds);
+                    }
                 }
             }
+        }
+
+        private string GetStringEmtpyIfNull(string param)
+        {
+            return String.IsNullOrEmpty(param) ? String.Empty : param;
         }
 
         private async Task<int> Replicate(int batchSize, int expectedSourceMaxQueryTime, int pauseDuration)
@@ -309,6 +327,12 @@ namespace NuGet.Services.Work.Jobs
             Level = EventLevel.Warning,
             Message = "Last replicated key has not changed meaning no data was inserted last run. Stopping")]
         public void LastReplicatedKeyNotChanged() { WriteEvent(9); }
+
+        [Event(
+            eventId: 10,
+            Level = EventLevel.Warning,
+            Message = "Query took longer than 5 seconds and executed in {0} seconds...")]
+        public void SlowQueryDuration(double timeSpanSeconds) { WriteEvent(10, timeSpanSeconds); }
 
         public static class Tasks
         {
