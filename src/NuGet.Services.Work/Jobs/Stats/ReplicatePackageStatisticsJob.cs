@@ -34,18 +34,33 @@ namespace NuGet.Services.Work.Jobs
 
         protected internal override async Task Execute()
         {
-            // Load defaults
-            Source = Source ?? Config.Sql.Legacy;
-            Destination = Destination ?? Config.Sql.Warehouse;
+            Exception caught = null;
+            try
+            {
+                // Load defaults
+                Source = Source ?? Config.Sql.Legacy;
+                Destination = Destination ?? Config.Sql.Warehouse;
 
-            Log.ReplicatingStatistics(Source.DataSource, Source.InitialCatalog, Destination.DataSource, Destination.InitialCatalog);
+                Log.ReplicatingStatistics(Source.DataSource, Source.InitialCatalog, Destination.DataSource, Destination.InitialCatalog);
 
-            const int BatchSize = 1000;                 //  number of rows to collect from the source
-            const int ExpectedSourceMaxQueryTime = 5;   //  if the query from the source database takes longer than this we must be busy
-            const int PauseDuration = 10;               //  pause applied when the queries to the source are taking a long time 
+                const int BatchSize = 1000;                 //  number of rows to collect from the source
+                const int ExpectedSourceMaxQueryTime = 5;   //  if the query from the source database takes longer than this we must be busy
+                const int PauseDuration = 10;               //  pause applied when the queries to the source are taking a long time
 
-            var count = await Replicate(BatchSize, ExpectedSourceMaxQueryTime, PauseDuration);
-            Log.ReplicatedStatistics(Source.DataSource, Source.InitialCatalog, Destination.DataSource, Destination.InitialCatalog, count);
+                var count = await Replicate(BatchSize, ExpectedSourceMaxQueryTime, PauseDuration);
+                Log.ReplicatedStatistics(Source.DataSource, Source.InitialCatalog, Destination.DataSource, Destination.InitialCatalog, count);
+            }
+            catch (Exception ex)
+            {
+                caught = ex;
+            }
+
+            await this.Enqueue(this.Invocation.Job, this.Invocation.Payload, TimeSpan.FromMinutes(3));
+
+            if(caught != null)
+            {
+                throw new Exception("Job failed. Check inner exception", caught);
+            }
         }
 
         public static async Task<int> GetLastOriginalKey(SqlConnectionStringBuilder connectionString)
