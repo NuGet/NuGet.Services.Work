@@ -15,6 +15,9 @@ namespace NuGet.Services.Work.Jobs
     [Description("Replicates package statistics from the primary database to the warehouse")]
     public class ReplicatePackageStatisticsJob : JobHandler<ReplicatePackageStatisticsEventSource>
     {
+        const int AddDownloadFactCommandTimeout = 180;
+        private static readonly TimeSpan AddDownloadFactCommandMinTimeSpan = TimeSpan.FromSeconds(AddDownloadFactCommandTimeout + 60);
+
         /// <summary>
         /// Gets or sets a connection string to the database containing package data.
         /// </summary>
@@ -122,14 +125,12 @@ namespace NuGet.Services.Work.Jobs
 
         private async Task PutDownloadRecords(List<DownloadFact> batch)
         {
-            int commandTimeout = 180;
-
             using (var connection = await Destination.ConnectTo())
             {
                 foreach (DownloadFact fact in batch)
                 {
                     SqlCommand command = new SqlCommand("AddDownloadFact", connection);
-                    command.CommandTimeout = commandTimeout;
+                    command.CommandTimeout = AddDownloadFactCommandTimeout;
                     command.CommandType = CommandType.StoredProcedure;
                     command.Parameters.AddWithValue("@OriginalKey", fact.OriginalKey);
                     command.Parameters.AddWithValue("@PackageId", GetStringEmtpyIfNull(fact.PackageId));
@@ -145,7 +146,7 @@ namespace NuGet.Services.Work.Jobs
                     command.Parameters.AddWithValue("@DownloadDependentPackageId", GetStringEmtpyIfNull(fact.DownloadDependentPackageId));
 
                     var start = DateTime.UtcNow;
-                    if ((Invocation.NextVisibleAt - DateTimeOffset.UtcNow) < TimeSpan.FromSeconds(commandTimeout))
+                    if ((Invocation.NextVisibleAt - DateTimeOffset.UtcNow) < AddDownloadFactCommandMinTimeSpan)
                     {
                         // Running out of time! Extend the job
                         // DefaultInvisibilityPeriod is 30 minutes
@@ -155,7 +156,7 @@ namespace NuGet.Services.Work.Jobs
                     var end = DateTime.UtcNow;
                     if ((end - start).TotalSeconds > 5)
                     {
-                        Log.SlowQueryDuration((end - start).TotalSeconds);
+                        Log.SlowQueryInfo((end - start).TotalSeconds, GetStringEmtpyIfNull(fact.PackageId), GetStringEmtpyIfNull(fact.PackageVersion), GetStringEmtpyIfNull(fact.DownloadUserAgent));
                     }
                 }
             }
@@ -346,8 +347,8 @@ namespace NuGet.Services.Work.Jobs
         [Event(
             eventId: 10,
             Level = EventLevel.Warning,
-            Message = "Query took longer than 5 seconds and executed in {0} seconds...")]
-        public void SlowQueryDuration(double timeSpanSeconds) { WriteEvent(10, timeSpanSeconds); }
+            Message = "Query took longer than 5 seconds and executed in {0} seconds for package '{1}.{2}' with userAgent '{3}'")]
+        public void SlowQueryInfo(double timeSpanSeconds, string packageId, string packageversion, string userAgent) { WriteEvent(10, timeSpanSeconds, packageId, packageversion, userAgent); }
 
         public static class Tasks
         {
