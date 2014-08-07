@@ -50,7 +50,7 @@ namespace NuGet.Services.Work
         }
 
         public JobRunner(JobDispatcher dispatcher, InvocationQueue queue, ConfigurationHub config, Clock clock)
-            : this(dispatcher, queue, config, clock, config.Storage.Primary.CreateCloudBlobClient().GetContainerReference(WorkService.InvocationLogsContainerBaseName))
+            : this(dispatcher, queue, config, clock, config.Storage.Primary == null ? null : config.Storage.Primary.CreateCloudBlobClient().GetContainerReference(WorkService.InvocationLogsContainerBaseName))
         {
         }
 
@@ -166,7 +166,10 @@ namespace NuGet.Services.Work
 
         protected internal virtual Task Dispatch(InvocationState invocation, CancellationToken cancelToken)
         {
-            return Dispatch(invocation, new BlobInvocationLogCapture(invocation, _logContainer), cancelToken);
+            var logCapture = _logContainer == null ?
+                new InvocationLogCapture(invocation) :
+                new BlobInvocationLogCapture(invocation, _logContainer);
+            return Dispatch(invocation, logCapture, cancelToken);
         }
 
         protected internal virtual Task Dispatch(InvocationState invocation, InvocationLogCapture capture, CancellationToken cancelToken)
