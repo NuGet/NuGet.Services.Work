@@ -9,14 +9,23 @@ using System.Text;
 using System.Threading.Tasks;
 using Dapper;
 using NuGet.Services.Configuration;
+using System.Data.SqlTypes;
+using System.Xml;
+using System.IO;
 
 namespace NuGet.Services.Work.Jobs
 {
     [Description("Replicates package statistics from the primary database to the warehouse")]
     public class ReplicatePackageStatisticsJob : JobHandler<ReplicatePackageStatisticsEventSource>
     {
+        // Following values are used when running "AddDownloadFact" stored proc which adds 1 download fact at a time to the warehouse
         const int AddDownloadFactCommandTimeout = 180;
         private static readonly TimeSpan AddDownloadFactCommandMinTimeSpan = TimeSpan.FromSeconds(AddDownloadFactCommandTimeout + 60);
+
+        // Following values are used when running "AddDownloadFacts" stored proc which adds a batch of download facts into warehouse
+        const int AddDownloadFactBatchCommandTimeout = 30;
+        private static readonly TimeSpan AddDownloadFactBatchCommandMinTime = TimeSpan.FromSeconds(AddDownloadFactBatchCommandTimeout + 60);
+        const int SlowBatchQueryDurationCutoff = 10;
 
         /// <summary>
         /// Gets or sets a connection string to the database containing package data.
@@ -125,41 +134,77 @@ namespace NuGet.Services.Work.Jobs
 
         private async Task PutDownloadRecords(List<DownloadFact> batch)
         {
+            if (batch.Count == 0)
+                return;
+
             using (var connection = await Destination.ConnectTo())
             {
-                foreach (DownloadFact fact in batch)
-                {
-                    SqlCommand command = new SqlCommand("AddDownloadFact", connection);
-                    command.CommandTimeout = AddDownloadFactCommandTimeout;
-                    command.CommandType = CommandType.StoredProcedure;
-                    command.Parameters.AddWithValue("@OriginalKey", fact.OriginalKey);
-                    command.Parameters.AddWithValue("@PackageId", GetStringEmtpyIfNull(fact.PackageId));
-                    command.Parameters.AddWithValue("@PackageVersion", GetStringEmtpyIfNull(fact.PackageVersion));
-                    command.Parameters.AddWithValue("@PackageListed", fact.PackageListed);
-                    command.Parameters.AddWithValue("@PackageTitle", GetStringEmtpyIfNull(fact.PackageTitle));
-                    command.Parameters.AddWithValue("@PackageDescription", GetStringEmtpyIfNull(fact.PackageDescription));
-                    command.Parameters.AddWithValue("@PackageIconUrl", GetStringEmtpyIfNull(fact.PackageIconUrl));
-                    command.Parameters.AddWithValue("@DownloadUserAgent", GetStringEmtpyIfNull(fact.DownloadUserAgent));
-                    command.Parameters.AddWithValue("@DownloadOperation", GetStringEmtpyIfNull(fact.DownloadOperation));
-                    command.Parameters.AddWithValue("@DownloadTimestamp", fact.DownloadTimestamp);
-                    command.Parameters.AddWithValue("@DownloadProjectTypes", GetStringEmtpyIfNull(fact.DownloadProjectTypes));
-                    command.Parameters.AddWithValue("@DownloadDependentPackageId", GetStringEmtpyIfNull(fact.DownloadDependentPackageId));
+                SqlCommand command = new SqlCommand("AddDownloadFacts", connection);
+                command.CommandTimeout = AddDownloadFactBatchCommandTimeout;
+                command.CommandType = CommandType.StoredProcedure;
 
-                    var start = DateTime.UtcNow;
-                    if ((Invocation.NextVisibleAt - DateTimeOffset.UtcNow) < AddDownloadFactCommandMinTimeSpan)
-                    {
-                        // Running out of time! Extend the job
-                        // DefaultInvisibilityPeriod is 30 minutes
-                        await Extend(JobRunner.DefaultInvisibilityPeriod);
-                    }
-                    await command.ExecuteNonQueryAsync();
-                    var end = DateTime.UtcNow;
-                    if ((end - start).TotalSeconds > 5)
-                    {
-                        Log.SlowQueryInfo((end - start).TotalSeconds, GetStringEmtpyIfNull(fact.PackageId), GetStringEmtpyIfNull(fact.PackageVersion), GetStringEmtpyIfNull(fact.DownloadUserAgent));
-                    }
+                SqlXml sqlXml = GetSqlXml(batch);
+                SqlParameter parameter = new SqlParameter("@Facts", SqlDbType.Xml);
+                parameter.Value = sqlXml;
+
+                command.Parameters.Add(parameter);
+
+                var start = DateTime.UtcNow;
+                if ((Invocation.NextVisibleAt - DateTimeOffset.UtcNow) < AddDownloadFactBatchCommandMinTime)
+                {
+                    // Running out of time! Extend the job
+                    // DefaultInvisibilityPeriod is 30 minutes
+                    await Extend(JobRunner.DefaultInvisibilityPeriod);
+                }
+                await command.ExecuteNonQueryAsync();
+                var end = DateTime.UtcNow;
+
+                int startOriginalKey = batch[0].OriginalKey;
+                int endOriginalKey = batch[batch.Count - 1].OriginalKey;
+                double queryDurationSeconds = (end - start).TotalSeconds;
+
+                if (queryDurationSeconds > SlowBatchQueryDurationCutoff)
+                {
+                    Log.SlowBatchQueryInfo(batch.Count, queryDurationSeconds, startOriginalKey, endOriginalKey, SlowBatchQueryDurationCutoff);
+                }
+                else
+                {
+                    Log.BatchQueryInfo(batch.Count, queryDurationSeconds, startOriginalKey, endOriginalKey);
                 }
             }
+        }
+
+        private SqlXml GetSqlXml(List<DownloadFact> batch)
+        {
+            const string TrueBitString = "1";
+            const string FalseBitString = "0";
+
+	        StringBuilder builder = new StringBuilder();
+	        using(var xmlWriter = XmlWriter.Create(builder))
+	        {
+		        xmlWriter.WriteStartDocument();
+                xmlWriter.WriteStartElement("facts");
+                    foreach (var fact in batch)
+                    {
+                        xmlWriter.WriteStartElement("fact");
+                        xmlWriter.WriteElementString("packageId", GetStringEmtpyIfNull(fact.PackageId));
+                        xmlWriter.WriteElementString("packageVersion", GetStringEmtpyIfNull(fact.PackageVersion));
+                        xmlWriter.WriteElementString("packageListed", fact.PackageListed ? TrueBitString : FalseBitString);
+                        xmlWriter.WriteElementString("packageTitle", GetStringEmtpyIfNull(fact.PackageTitle));
+                        xmlWriter.WriteElementString("packageDescription", GetStringEmtpyIfNull(fact.PackageDescription));
+                        xmlWriter.WriteElementString("packageIconUrl", GetStringEmtpyIfNull(fact.PackageIconUrl));
+                        xmlWriter.WriteElementString("downloadUserAgent", GetStringEmtpyIfNull(fact.DownloadUserAgent));
+                        xmlWriter.WriteElementString("downloadOperation", GetStringEmtpyIfNull(fact.DownloadOperation));
+                        xmlWriter.WriteElementString("downloadTimestamp", fact.DownloadTimestamp.ToString("O"));
+                        xmlWriter.WriteElementString("downloadProjectTypes", GetStringEmtpyIfNull(fact.DownloadProjectTypes));
+                        xmlWriter.WriteElementString("downloadDependentPackageId", GetStringEmtpyIfNull(fact.DownloadDependentPackageId));
+                        xmlWriter.WriteElementString("originalKey", fact.OriginalKey.ToString());
+                        xmlWriter.WriteEndElement();
+                    }
+                xmlWriter.WriteEndElement();
+		        xmlWriter.WriteEndDocument();
+	        }
+	        return new SqlXml(XmlReader.Create(new StringReader(builder.ToString())));
         }
 
         private string GetStringEmtpyIfNull(string param)
@@ -349,6 +394,18 @@ namespace NuGet.Services.Work.Jobs
             Level = EventLevel.Warning,
             Message = "Query took longer than 5 seconds and executed in {0} seconds for package '{1}.{2}' with userAgent '{3}'")]
         public void SlowQueryInfo(double timeSpanSeconds, string packageId, string packageversion, string userAgent) { WriteEvent(10, timeSpanSeconds, packageId, packageversion, userAgent); }
+
+        [Event(
+            eventId: 11,
+            Level = EventLevel.Warning,
+            Message = "Query for batch of size {0} executed in {1} seconds. Start originalKey : {2}, End originalKey : {3}")]
+        public void BatchQueryInfo(int batchSize, double timeSpanSeconds, int startOriginalKey, int endOriginalKey) { WriteEvent(11, batchSize, timeSpanSeconds, startOriginalKey, endOriginalKey); }
+
+        [Event(
+            eventId: 12,
+            Level = EventLevel.Warning,
+            Message = "Slow Query for batch of size {0} took longer than {4} seconds executed in {1} seconds. Start originalKey : {2}, End originalKey : {3}")]
+        public void SlowBatchQueryInfo(int batchSize, double timeSpanSeconds, int startOriginalKey, int endOriginalKey, int slowBatchQueryDurationCutoff) { WriteEvent(12, batchSize, timeSpanSeconds, startOriginalKey, endOriginalKey, slowBatchQueryDurationCutoff); }
 
         public static class Tasks
         {
