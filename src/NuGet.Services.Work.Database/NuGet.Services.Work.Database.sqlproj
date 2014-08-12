@@ -83,6 +83,7 @@
     <Build Include="Stored Procedures\work.DequeueInvocation.sql" />
     <Build Include="Stored Procedures\work.EnqueueInvocation.sql" />
     <Build Include="User-Defined Types\work.IdList.sql" />
+    <Build Include="Stored Procedures\work.CancelNodeInvocations.sql" />
   </ItemGroup>
   <ItemGroup>
     <None Include="LocalDb.publish.xml" />

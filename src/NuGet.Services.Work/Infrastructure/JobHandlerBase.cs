@@ -88,6 +88,20 @@ namespace NuGet.Services.Work
             return Context.Queue.Extend(Invocation, duration);
         }
 
+        protected virtual Task<bool> ExtendIfNeeded(TimeSpan extendFor)
+        {
+            return ExtendIfNeeded(extendFor, TimeSpan.FromMinutes(1));
+        }
+
+        protected virtual Task<bool> ExtendIfNeeded(TimeSpan extendFor, TimeSpan threshold)
+        {
+            if (Invocation.NextVisibleAt - DateTime.UtcNow < threshold)
+            {
+                return Extend(extendFor);
+            }
+            return Task.FromResult(false);
+        }
+
         protected virtual InvocationResult BindContext(InvocationContext context)
         {
             // Bind invocation information

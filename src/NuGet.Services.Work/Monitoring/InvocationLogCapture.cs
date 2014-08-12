@@ -74,6 +74,7 @@ namespace NuGet.Services.Work.Monitoring
         private string _tempFile;
         private string _blobName;
         private CloudBlockBlob _targetBlob;
+        private Subject<Unit> _flushBuffer = new Subject<Unit>();
 
         public CloudBlobContainer LogContainer { get; private set; }
 
@@ -115,7 +116,11 @@ namespace NuGet.Services.Work.Monitoring
 
             // Capture the events into a JSON file and a plain text file
             var formatter = new JsonEventTextFormatter(EventTextFormatting.Indented, dateTimeFormat: "O");
-            _eventSubscription = this.Buffer(TimeSpan.FromSeconds(5))
+            _eventSubscription = this.Buffer(() =>
+                Observable.Amb(
+                    _flushBuffer, 
+                    Observable.Timer(TimeSpan.FromSeconds(5)).Select(x => Unit.Instance))
+                    .Take(1))
                 .Subscribe(
                 onNext: evts =>
                 {
@@ -148,6 +153,9 @@ namespace NuGet.Services.Work.Monitoring
 
         public override async Task<Uri> End()
         {
+            // Flush the buffer
+            _flushBuffer.OnNext(Unit.Instance);
+
             // Disconnect the listener and stop the timer
             _eventSubscription.Dispose();
 

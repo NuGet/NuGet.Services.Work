@@ -39,8 +39,7 @@ namespace NuGet.Services.Work.Jobs.Catalog
 
         protected internal override async Task Execute()
         {
-            // Disable job re-run logic
-            await Extend(TimeSpan.FromDays(365));
+            await Extend(TimeSpan.FromMinutes(10));
 
             var collectorBatchSize = ChecksumCollectorBatchSize ?? DefaultChecksumCollectorBatchSize;
             var catalogPageSize = CatalogPageSize ?? DefaultCatalogPageSize;
@@ -73,27 +72,38 @@ namespace NuGet.Services.Work.Jobs.Catalog
                 await checksums.Load();
                 Log.LoadedChecksums(checksums.Data.Count);
 
+                await ExtendIfNeeded(TimeSpan.FromMinutes(10));
+
                 // 2. Collect new checksums
                 Log.CollectingChecksums(catalogDirectory.Uri.ToString());
                 await checksumCollector.Run(http, indexBlob.Uri, checksums.Cursor);
                 Log.CollectedChecksums(checksums.Data.Count);
+
+                await ExtendIfNeeded(TimeSpan.FromMinutes(10));
 
                 // 3. Process updates
                 Log.UpdatingCatalog();
                 await updater.Update(SourceDatabase.ConnectionString, indexBlob.Uri);
                 Log.UpdatedCatalog();
 
+                await ExtendIfNeeded(TimeSpan.FromMinutes(10));
+
                 // 4. Collect new checksums
                 Log.CollectingChecksums(catalogDirectory.Uri.ToString());
                 await checksumCollector.Run(http, indexBlob.Uri, checksums.Cursor);
                 Log.CollectedChecksums(checksums.Data.Count);
 
+                await ExtendIfNeeded(TimeSpan.FromMinutes(10));
+
                 // 5. Save existing checksums file
                 Log.SavingChecksums(checksums.Uri.ToString());
                 await checksums.Save();
                 Log.SavedChecksums();
+
+                await ExtendIfNeeded(TimeSpan.FromMinutes(10));
             }
 
+            await this.Enqueue(this.Invocation.Job, this.Invocation.Payload, TimeSpan.FromSeconds(3));
         }
 
         private CollectorHttpClient CreateHttpClient()

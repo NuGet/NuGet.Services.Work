@@ -80,6 +80,11 @@ namespace NuGet.Services.Work
 
         public virtual async Task Run(CancellationToken cancelToken)
         {
+            WorkServiceEventSource.Log.ReinitializingInvocationState(Queue.InstanceName);
+            await Queue.ReinitializeInvocationState();
+            WorkServiceEventSource.Log.ReinitializedInvocationState();
+
+
             WorkServiceEventSource.Log.DispatchLoopStarted();
             try
             {

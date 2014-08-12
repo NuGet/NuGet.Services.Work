@@ -112,5 +112,17 @@ namespace NuGet.Services.Work.Monitoring
 
         [NonEvent]
         public void Cancelled(InvocationState invocation) { Cancelled(invocation.Id, invocation.Job, invocation.UpdatedAt.ToString("O"), invocation.ResultMessage); }
+
+        [Event(
+            eventId: 14,
+            Level = EventLevel.Informational,
+            Message = "Reinitializing Invocation State for instance '{0}'.")]
+        public void ReinitializingInvocationState(string instanceName) { WriteEvent(14, instanceName); }
+
+        [Event(
+            eventId: 15,
+            Level = EventLevel.Informational,
+            Message = "Reinitialized Invocation State.")]
+        public void ReinitializedInvocationState() { WriteEvent(15); }
     }
 }
