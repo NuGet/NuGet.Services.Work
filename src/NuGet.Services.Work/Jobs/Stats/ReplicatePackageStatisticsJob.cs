@@ -17,12 +17,14 @@ namespace NuGet.Services.Work.Jobs
     [Description("Replicates package statistics from the primary database to the warehouse")]
     public class ReplicatePackageStatisticsJob : JobHandler<ReplicatePackageStatisticsEventSource>
     {
-        const int AddDownloadFactCommandTimeout = 180;
         static int MinBatchSize = 100;
         static int MaxBatchSize = 10000;
         static Dictionary<double, int> BatchTimes = new Dictionary<double, int>();
-
-        private static readonly TimeSpan AddDownloadFactCommandMinTimeSpan = TimeSpan.FromSeconds(AddDownloadFactCommandTimeout + 60);
+        static TimeSpan MaxBatchTime = TimeSpan.FromSeconds(
+            30 + // Get the LastOriginalKey from the warehouse
+            30 + // Get the batch from the source
+            30 + // Put the batch into the destination
+            30); // Some buffer time
 
         /// <summary>
         /// Gets or sets a connection string to the database containing package data.
@@ -83,6 +85,13 @@ namespace NuGet.Services.Work.Jobs
 
             do
             {
+                if ((Invocation.NextVisibleAt - DateTimeOffset.UtcNow) < MaxBatchTime)
+                {
+                    // Running out of time! Extend the job.
+                    // DefaultInvisibilityPeriod is 30 minutes
+                    await Extend(JobRunner.DefaultInvisibilityPeriod);
+                }
+
                 Log.GettingLastReplicatedKey(Destination.DataSource, Destination.InitialCatalog);
                 var targetMaxKey = await GetMaxTargetKey(Destination);
                 Log.GotLastReplicatedKey(Destination.DataSource, Destination.InitialCatalog, targetMaxKey);
@@ -142,7 +151,17 @@ namespace NuGet.Services.Work.Jobs
         {
             if (BatchTimes.Any())
             {
-                MaxBatchSize = BatchTimes.Values.Max();
+                int maxSuccessfulMatch = BatchTimes.Values.Max();
+
+                if (MaxBatchSize > maxSuccessfulMatch)
+                {
+                    MaxBatchSize = maxSuccessfulMatch;
+                }
+                else
+                {
+                    MaxBatchSize = MaxBatchSize * 2 / 3;
+                }
+
                 Log.CappingMaxBatchSize(MaxBatchSize);
             }
             else
@@ -252,6 +271,12 @@ namespace NuGet.Services.Work.Jobs
 
         private int GetNextBatchSize()
         {
+            // Every 100 runs, we will reset our time recordings and find a new best time all over
+            if (BatchTimes.Count >= 100)
+            {
+                BatchTimes.Clear();
+            }
+
             int nextBatchSize;
 
             if (BatchTimes.Count == 0)
