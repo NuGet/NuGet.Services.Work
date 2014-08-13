@@ -174,29 +174,6 @@ namespace NuGet.Services.Work.Jobs
             return batchCount;
         }
 
-        public static async Task<int> GetMaxTargetKey(SqlConnectionStringBuilder connectionString)
-        {
-            using (var connection = await connectionString.ConnectTo())
-            {
-                SqlCommand command = new SqlCommand("GetLastOriginalKey", connection);
-
-                SqlParameter resultParam = command.CreateParameter();
-                resultParam.Direction = ParameterDirection.Output;
-                resultParam.DbType = DbType.Int32;
-                resultParam.ParameterName = "@OriginalKey";
-                command.Parameters.Add(resultParam);
-
-                await command.ExecuteNonQueryAsync();
-
-                if (resultParam.Value is DBNull)
-                {
-                    return 0;
-                }
-
-                return (int)resultParam.Value;
-            }
-        }
-
         public static async Task<int> GetMaxSourceKey(SqlConnectionStringBuilder connectionString)
         {
             using (var connection = await connectionString.ConnectTo())
@@ -204,7 +181,22 @@ namespace NuGet.Services.Work.Jobs
                 SqlCommand command = new SqlCommand("SELECT MAX([Key]) AS MaxOriginalKey FROM PackageStatistics", connection);
                 int? maxOriginalKey = await command.ExecuteScalarAsync() as int?;
 
-                return maxOriginalKey ?? 0;
+                return maxOriginalKey ?? -1;
+            }
+        }
+
+        public static async Task<int> GetMaxTargetKey(SqlConnectionStringBuilder connectionString)
+        {
+            using (var connection = await connectionString.ConnectTo())
+            {
+                SqlCommand command = new SqlCommand("GetLastOriginalKey", connection) { CommandType = CommandType.StoredProcedure };
+                SqlParameter param = new SqlParameter("@OriginalKey", SqlDbType.Int) { Direction = ParameterDirection.Output };
+                command.Parameters.Add(param);
+
+                await command.ExecuteNonQueryAsync();
+                int? maxOriginalKey = param.Value as int?;
+
+                return maxOriginalKey ?? -1;
             }
         }
 
@@ -267,7 +259,7 @@ namespace NuGet.Services.Work.Jobs
                 nextBatchSize = MinBatchSize;
                 Log.UsingFirstSampleBatchSize(MinBatchSize, MaxBatchSize);
             }
-            if (BatchTimes.Count < 11)
+            else if (BatchTimes.Count < 11)
             {
                 // We'll run through 11 iterations of our possible range, with 10% increments along the way.
                 // Yes, 11. Because fenceposts.
