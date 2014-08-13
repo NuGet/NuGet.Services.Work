@@ -43,7 +43,7 @@ namespace NuGet.Services.Work.Jobs
             BatchSize = BatchSize ?? DefaultBatchSize;
 
             Log.GettingLastReplicatedKey(Destination.DataSource, Destination.InitialCatalog);
-            int originalKey = await ReplicatePackageStatisticsJob.GetLastOriginalKey(Destination);
+            int originalKey = await ReplicatePackageStatisticsJob.GetMaxTargetKey(Destination);
             Log.GotLastReplicatedKey(Destination.DataSource, Destination.InitialCatalog, originalKey);
 
             Log.PurgingStatistics(Source.DataSource, Source.InitialCatalog, Destination.DataSource, Destination.InitialCatalog);
