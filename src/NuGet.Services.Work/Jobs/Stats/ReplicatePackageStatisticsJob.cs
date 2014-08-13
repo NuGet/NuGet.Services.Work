@@ -108,7 +108,7 @@ namespace NuGet.Services.Work.Jobs
                 }
                 catch (SqlException sqlException)
                 {
-                    Log.BatchFailed(Source.DataSource, Source.InitialCatalog, Destination.DataSource, Destination.InitialCatalog, batchSize, sourceMaxKey, targetMaxKey, sqlException);
+                    Log.BatchFailed(Source.DataSource, Source.InitialCatalog, Destination.DataSource, Destination.InitialCatalog, batchSize, sourceMaxKey, targetMaxKey, sqlException.ToString());
 
                     // If we can't even process the min batch size, then give up
                     if (batchSize == MinBatchSize)
@@ -404,8 +404,8 @@ namespace NuGet.Services.Work.Jobs
             eventId: 16,
             Level = EventLevel.Error,
             Message = "An error occurring replicating a batch. Source: {0}/{1}. Destination: {2}/{3}. Batch Size: {4}. Last Original Key: {5}. Exception: {6}")]
-        public void BatchFailed(string sourceServer, string sourceDatabase, string destinationServer, string destinationDatabase, int batchSize, int sourceMaxKey, int destinationMaxKey, SqlException exception)
-        { WriteEvent(16, sourceServer, sourceDatabase, destinationServer, destinationDatabase, batchSize, sourceMaxKey, destinationMaxKey, exception.ToString()); }
+        public void BatchFailed(string sourceServer, string sourceDatabase, string destinationServer, string destinationDatabase, int batchSize, int sourceMaxKey, int destinationMaxKey, string exception)
+        { WriteEvent(16, sourceServer, sourceDatabase, destinationServer, destinationDatabase, batchSize, sourceMaxKey, destinationMaxKey, exception); }
 
         [Event(
             eventId: 17,
