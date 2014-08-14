@@ -120,7 +120,7 @@ namespace NuGet.Services.Work.Jobs
                     Log.BatchFailed(Source.DataSource, Source.InitialCatalog, Destination.DataSource, Destination.InitialCatalog, batchSize, sourceMaxKey, targetMaxKey, sqlException.ToString());
 
                     // If we can't even process the min batch size, then give up
-                    if (batchSize == MinBatchSize)
+                    if (batchSize <= MinBatchSize)
                     {
                         throw;
                     }
@@ -162,6 +162,8 @@ namespace NuGet.Services.Work.Jobs
                     MaxBatchSize = MaxBatchSize * 2 / 3;
                 }
 
+                // Ensure the Max doesn't fall below the Min
+                MaxBatchSize = Math.Max(MaxBatchSize, MinBatchSize);
                 Log.CappingMaxBatchSize(MaxBatchSize);
             }
             else
@@ -169,6 +171,8 @@ namespace NuGet.Services.Work.Jobs
                 MinBatchSize = MinBatchSize / 2;
                 MaxBatchSize = MaxBatchSize * 2 / 3;
 
+                // Ensure the Max doesn't fall below the Min
+                MaxBatchSize = Math.Max(MaxBatchSize, MinBatchSize);
                 Log.ReducingBatchSizes(MinBatchSize, MaxBatchSize);
             }
         }
