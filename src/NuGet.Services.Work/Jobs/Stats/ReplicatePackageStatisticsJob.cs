@@ -100,8 +100,13 @@ namespace NuGet.Services.Work.Jobs
                     break;
                 }
 
+                double recordsPerSecond;
+                int batchSize = GetNextBatchSize(out recordsPerSecond);
 
-                int batchSize = GetNextBatchSize();
+                if (recordsPerSecond > 0)
+                {
+                    Log.WorkRemaining(sourceMaxKey, targetMaxKey, recordsPerSecond);
+                }
 
                 try
                 {
@@ -154,7 +159,8 @@ namespace NuGet.Services.Work.Jobs
 
                 if (MaxBatchSize > maxSuccessfulMatch)
                 {
-                    MaxBatchSize = maxSuccessfulMatch;
+                    // Split the difference between the max successful batch size and our batch size that just failed
+                    MaxBatchSize = (maxSuccessfulMatch + batchSize) / 2;
                 }
                 else
                 {
@@ -272,7 +278,7 @@ namespace NuGet.Services.Work.Jobs
             }
         }
 
-        private int GetNextBatchSize()
+        private int GetNextBatchSize(out double recordsPerSecond)
         {
             // Every 100 runs, we will reset our time recordings and find a new best time all over
             if (BatchTimes.Count >= 100)
@@ -285,14 +291,16 @@ namespace NuGet.Services.Work.Jobs
             if (BatchTimes.Count == 0)
             {
                 nextBatchSize = MinBatchSize;
+                recordsPerSecond = 0;
                 Log.UsingFirstSampleBatchSize(MinBatchSize, MaxBatchSize);
             }
             else if (BatchTimes.Count < 11)
             {
                 // We'll run through 11 iterations of our possible range, with 10% increments along the way.
                 // Yes, 11. Because fenceposts.
-                nextBatchSize = MinBatchSize + ((MaxBatchSize - MinBatchSize) / 10 * BatchTimes.Count);
                 KeyValuePair<double, int> bestSoFar = BatchTimes.OrderByDescending(batch => batch.Key).First();
+                nextBatchSize = MinBatchSize + ((MaxBatchSize - MinBatchSize) / 10 * BatchTimes.Count);
+                recordsPerSecond = bestSoFar.Key; // Optimistically, we'll match the best time after it all levels out
                 Log.UsingNextSampleBatchSize(BatchTimes.Count, nextBatchSize, bestSoFar.Value, bestSoFar.Key);
             }
             else
@@ -302,6 +310,7 @@ namespace NuGet.Services.Work.Jobs
                 string bestPaces = String.Join(", ", bestBatches.Select(batch => (int)batch.Key));
 
                 nextBatchSize = (int)bestBatches.Select(batch => batch.Value).Average();
+                recordsPerSecond = bestBatches.First().Key; // Optimistically, we'll match the best time
                 Log.UsingCalculatedBatchSize(nextBatchSize, BatchTimes.Count, bestSizes, bestPaces);
             }
 
@@ -457,6 +466,19 @@ namespace NuGet.Services.Work.Jobs
             Message = "Aborting - Unable to process minimum batch size. Source: {0}/{1}. Destination: {2}/{3}. Batch Size: {4}. Source Max Original Key: {5}; Destination Max Original Key: {6}")]
         public void UnableToProcessMinimumBatchSize(string sourceServer, string sourceDatabase, string destinationServer, string destinationDatabase, int batchSize, int sourceMaxKey, int destinationMaxKey)
         { WriteEvent(20, sourceServer, sourceDatabase, destinationServer, destinationDatabase, batchSize, sourceMaxKey, destinationMaxKey); }
+
+        [Event(
+            eventId: 21,
+            Level = EventLevel.Informational,
+            Message = "Records Remaining: {0}. Optimistic Pace: {1} / second. Optimistic Time Remaining: {2}")]
+        public void WorkRemaining(int sourceMaxKey, int targetMaxKey, double recordsPerSecond)
+        {
+            int recordsRemaining = sourceMaxKey - targetMaxKey;
+            double secondsRemaining = recordsRemaining / recordsPerSecond;
+
+            TimeSpan timeRemaining = TimeSpan.FromSeconds(secondsRemaining);
+            WriteEvent(21, recordsRemaining.ToString("#,###"), (int)recordsPerSecond, timeRemaining.ToString());
+        }
 
         public static class Tasks
         {
