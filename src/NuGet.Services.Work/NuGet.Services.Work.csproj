@@ -189,9 +189,9 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\packages\NuGet.Core.2.8.2\lib\net40-Client\NuGet.Core.dll</HintPath>
     </Reference>
-    <Reference Include="NuGet.Indexing, Version=3.0.33.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="NuGet.Indexing, Version=3.0.37.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\packages\NuGet.Indexing.3.0.33-r-master\lib\net45\NuGet.Indexing.dll</HintPath>
+      <HintPath>..\..\packages\NuGet.Indexing.3.0.37-r-master\lib\net45\NuGet.Indexing.dll</HintPath>
     </Reference>
     <Reference Include="NuGet.Services.Metadata.Catalog, Version=3.0.84.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>

@@ -25,6 +25,7 @@ namespace NuGet.Services.Work.Jobs
                 Container = String.IsNullOrEmpty(LocalIndexFolder) ? 
                     (StorageContainerName ?? "ng-search") :
                     null,
+                DataContainer = DataContainerName,
                 Folder = LocalIndexFolder,
                 Log = new EventSourceWriter(Log.IndexingTrace),
             };
