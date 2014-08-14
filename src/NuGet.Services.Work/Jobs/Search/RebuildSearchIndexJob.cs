@@ -27,14 +27,14 @@ namespace NuGet.Services.Work.Jobs
             Log.BeginningIndex(
                 PackageDatabase.DataSource + "/" + PackageDatabase.InitialCatalog,
                 String.IsNullOrEmpty(LocalIndexFolder) ?
-                    (StorageAccount.Credentials.AccountName + "/" + StorageContainerName) :
+                    (StorageAccount.Credentials.AccountName + "/" + IndexContainerName) :
                     LocalIndexFolder);
             FullBuildTask task = new FullBuildTask()
             {
                 SqlConnectionString = PackageDatabase.ConnectionString,
                 StorageAccount = StorageAccount,
                 Container = String.IsNullOrEmpty(LocalIndexFolder) ?
-                    StorageContainerName :
+                    IndexContainerName :
                     null,
                 DataContainer = DataContainerName,
                 Folder = LocalIndexFolder,

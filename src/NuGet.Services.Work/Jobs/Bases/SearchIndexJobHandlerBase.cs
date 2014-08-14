@@ -34,7 +34,7 @@ namespace NuGet.Services.Work.Jobs.Bases
             // Load default values
             PackageDatabase = PackageDatabase ?? Config.Sql.Legacy;
             StorageAccount = StorageAccount ?? Config.Storage.Primary;
-            StorageContainerName = StorageContainerName ?? "ng-search";
+            IndexContainerName = IndexContainerName ?? "ng-search";
 
             return result;
         }
