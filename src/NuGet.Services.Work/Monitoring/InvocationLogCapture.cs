@@ -138,16 +138,13 @@ namespace NuGet.Services.Work.Monitoring
                 });
         }
 
-        private Task UploadLog()
+        private async Task UploadLog()
         {
             if (File.Exists(_tempFile))
             {
                 // Upload the file to blob storage
-                return _targetBlob.UploadFromFileAsync(_tempFile, FileMode.Open);
-            }
-            else
-            {
-                return Task.FromResult(0);
+                await LogContainer.CreateIfNotExistsAsync();
+                await _targetBlob.UploadFromFileAsync(_tempFile, FileMode.Open);
             }
         }
 
