@@ -6,10 +6,8 @@ using System.Data.SqlClient;
 using System.Diagnostics;
 using System.Diagnostics.Tracing;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using System.Xml.Linq;
-using Dapper;
 using NuGet.Services.Configuration;
 
 namespace NuGet.Services.Work.Jobs
