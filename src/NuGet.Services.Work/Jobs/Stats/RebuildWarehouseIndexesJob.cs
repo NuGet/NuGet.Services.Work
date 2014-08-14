@@ -36,7 +36,14 @@ namespace NuGet.Services.Work.Jobs
                 Log.RebuildingIndexes(WarehouseConnection.DataSource, WarehouseConnection.InitialCatalog);
                 if (!WhatIf)
                 {
-                    await connection.ExecuteAsync("RebuildIndexes");
+                    SqlCommand rebuild = connection.CreateCommand();
+                    rebuild.CommandText = "RebuildIndexes";
+                    rebuild.CommandTimeout =
+                        60 * // seconds
+                        60 * // minutes
+                        4;   // hours
+
+                    await rebuild.ExecuteNonQueryAsync();
                 }
                 Log.RebuiltIndexes(WarehouseConnection.DataSource, WarehouseConnection.InitialCatalog);
             }
