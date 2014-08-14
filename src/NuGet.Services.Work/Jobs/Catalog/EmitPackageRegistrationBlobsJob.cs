@@ -37,8 +37,7 @@ namespace NuGet.Services.Work.Jobs
 
         protected internal override async Task Execute()
         {
-            // Disable job re-run logic
-            await Extend(TimeSpan.FromDays(365));
+            await Extend(TimeSpan.FromMinutes(10));
 
             // Set defaults
             TargetStorageAccount = TargetStorageAccount ?? Config.Storage.Primary;
@@ -101,6 +100,8 @@ namespace NuGet.Services.Work.Jobs
             
             collector.ProcessedCommit += cursor =>
             {
+                ExtendIfNeeded(TimeSpan.FromMinutes(10)).Wait();
+                
                 if (!Equals(cursor, lastCursor))
                 {
                     StoreCursor(storage, cursorUri, cursor).Wait();

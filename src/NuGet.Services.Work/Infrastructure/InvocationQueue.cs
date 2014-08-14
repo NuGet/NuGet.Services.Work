@@ -28,9 +28,10 @@ namespace NuGet.Services.Work
         public static readonly string ArchiveContainer = "work-archive";
 
         private SqlConnectionStringBuilder _connectionString;
-        private string _instanceName;
         private Clock _clock;
         private CloudBlobContainer _archiveContainer;
+
+        public string InstanceName { get; private set; }
         
         protected InvocationQueue() { }
 
@@ -46,8 +47,16 @@ namespace NuGet.Services.Work
         {
             _clock = clock;
             _archiveContainer = archiveContainer;
-            _instanceName = instanceName;
+            InstanceName = instanceName;
             _connectionString = connectionString;
+        }
+
+        public virtual Task ReinitializeInvocationState()
+        {
+            return ConnectAndExec("work.CancelNodeInvocations", new
+            {
+                InstanceName = InstanceName
+            });
         }
 
         public virtual Task<InvocationState> Enqueue(string job, string source)
@@ -93,7 +102,7 @@ namespace NuGet.Services.Work
                     Source = source,
                     Payload = payloadString,
                     NextVisibleAt = invisibleUntil.UtcDateTime,
-                    InstanceName = _instanceName,
+                    InstanceName = InstanceName,
                     JobInstanceName = jobInstanceName,
                     UnlessAlreadyRunning = unlessAlreadyRunning
                 });
@@ -115,7 +124,7 @@ namespace NuGet.Services.Work
                 "work.DequeueInvocation",
                 new
                 {
-                    InstanceName = _instanceName,
+                    InstanceName = InstanceName,
                     HideUntil = invisibleUntil.UtcDateTime
                 });
 
@@ -146,7 +155,7 @@ namespace NuGet.Services.Work
                     Result = (int)result,
                     ResultMessage = resultMessage,
                     LogUrl = logUrl,
-                    InstanceName = _instanceName
+                    InstanceName = InstanceName
                 });
             return ProcessResult(invocation, newVersion);
         }
@@ -167,7 +176,7 @@ namespace NuGet.Services.Work
                     Id = invocation.Id,
                     Version = invocation.CurrentVersion,
                     ExtendTo = invisibleUntil.UtcDateTime,
-                    InstanceName = _instanceName
+                    InstanceName = InstanceName
                 });
 
             return ProcessResult(invocation, newVersion);
@@ -186,7 +195,7 @@ namespace NuGet.Services.Work
                     Payload = serializedPayload,
                     SuspendUntil = suspendUntil.UtcDateTime,
                     LogUrl = logUrl,
-                    InstanceName = _instanceName
+                    InstanceName = InstanceName
                 });
             return ProcessResult(invocation, newVersion);
         }
@@ -201,7 +210,7 @@ namespace NuGet.Services.Work
                     Version = invocation.CurrentVersion,
                     Status = status,
                     Result = result,
-                    InstanceName = _instanceName
+                    InstanceName = InstanceName
                 });
             return ProcessResult(invocation, newVersion);
         }
