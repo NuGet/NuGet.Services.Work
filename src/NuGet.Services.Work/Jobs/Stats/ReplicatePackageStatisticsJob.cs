@@ -387,6 +387,11 @@ namespace NuGet.Services.Work.Jobs
             Message = "Last replicated key has not changed meaning no data was inserted last run. Stopping")]
         public void LastReplicatedKeyNotChanged() { WriteEvent(9); }
 
+        /* *****************************
+         * Event Id 10 used to exist
+         * It was 'SlowQueryInfo'
+         * *****************************/
+
         [Event(
             eventId: 11,
             Level = EventLevel.Informational,
@@ -447,11 +452,11 @@ namespace NuGet.Services.Work.Jobs
         public void SuccessfulBatch(int batchSize, double elapsedSeconds, double perSecond) { WriteEvent(19, batchSize, elapsedSeconds, perSecond); }
 
         [Event(
-            eventId: 17,
+            eventId: 20,
             Level = EventLevel.Critical,
             Message = "Aborting - Unable to process minimum batch size. Source: {0}/{1}. Destination: {2}/{3}. Batch Size: {4}. Source Max Original Key: {5}; Destination Max Original Key: {6}")]
         public void UnableToProcessMinimumBatchSize(string sourceServer, string sourceDatabase, string destinationServer, string destinationDatabase, int batchSize, int sourceMaxKey, int destinationMaxKey)
-        { WriteEvent(17, sourceServer, sourceDatabase, destinationServer, destinationDatabase, batchSize, sourceMaxKey, destinationMaxKey); }
+        { WriteEvent(20, sourceServer, sourceDatabase, destinationServer, destinationDatabase, batchSize, sourceMaxKey, destinationMaxKey); }
 
         public static class Tasks
         {
