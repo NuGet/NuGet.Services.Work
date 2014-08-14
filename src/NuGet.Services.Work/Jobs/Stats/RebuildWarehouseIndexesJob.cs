@@ -19,6 +19,11 @@ namespace NuGet.Services.Work.Jobs
         /// </summary>
         public SqlConnectionStringBuilder WarehouseConnection { get; set; }
 
+        /// <summary>
+        /// Gets or sets the command timeout (in seconds)
+        /// </summary>
+        public int CommandTimeout { get; set; }
+
         protected ConfigurationHub Config { get; set; }
 
         public RebuildWarehouseIndexesJob(ConfigurationHub config)
@@ -38,11 +43,12 @@ namespace NuGet.Services.Work.Jobs
                 {
                     SqlCommand rebuild = connection.CreateCommand();
                     rebuild.CommandText = "RebuildIndexes";
-                    rebuild.CommandTimeout =
+                    rebuild.CommandTimeout = CommandTimeout > 0 ? CommandTimeout :
                         60 * // seconds
                         60 * // minutes
                         4;   // hours
 
+                    await Extend(TimeSpan.FromSeconds(rebuild.CommandTimeout));
                     await rebuild.ExecuteNonQueryAsync();
                 }
                 Log.RebuiltIndexes(WarehouseConnection.DataSource, WarehouseConnection.InitialCatalog);
