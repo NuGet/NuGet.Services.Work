@@ -120,6 +120,7 @@ namespace NuGet.Services.Work.Jobs
                     // If we can't even process the min batch size, then give up
                     if (batchSize <= MinBatchSize)
                     {
+                        Log.UnableToProcessMinimumBatchSize(Source.DataSource, Source.InitialCatalog, Destination.DataSource, Destination.InitialCatalog, batchSize, sourceMaxKey, targetMaxKey);
                         throw;
                     }
 
@@ -444,6 +445,13 @@ namespace NuGet.Services.Work.Jobs
             Level = EventLevel.Informational,
             Message = "Batch of {0} records succeeded in {1} seconds ({2}/second)")]
         public void SuccessfulBatch(int batchSize, double elapsedSeconds, double perSecond) { WriteEvent(19, batchSize, elapsedSeconds, perSecond); }
+
+        [Event(
+            eventId: 17,
+            Level = EventLevel.Critical,
+            Message = "Aborting - Unable to process minimum batch size. Source: {0}/{1}. Destination: {2}/{3}. Batch Size: {4}. Source Max Original Key: {5}; Destination Max Original Key: {6}")]
+        public void UnableToProcessMinimumBatchSize(string sourceServer, string sourceDatabase, string destinationServer, string destinationDatabase, int batchSize, int sourceMaxKey, int destinationMaxKey)
+        { WriteEvent(17, sourceServer, sourceDatabase, destinationServer, destinationDatabase, batchSize, sourceMaxKey, destinationMaxKey); }
 
         public static class Tasks
         {
