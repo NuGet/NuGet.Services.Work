@@ -304,7 +304,8 @@ namespace NuGet.Services.Work.Jobs
                 Log.UsingCalculatedBatchSize(nextBatchSize, BatchTimes.Count, bestSizes, bestPaces);
             }
 
-            return nextBatchSize;
+            // Ensure the next batch size is within the allowable range
+            return Math.Max(Math.Min(nextBatchSize, MaxBatchSize), MinBatchSize);
         }
     }
 
@@ -422,7 +423,7 @@ namespace NuGet.Services.Work.Jobs
         [Event(
             eventId: 16,
             Level = EventLevel.Error,
-            Message = "An error occurring replicating a batch. Source: {0}/{1}. Destination: {2}/{3}. Batch Size: {4}. Last Original Key: {5}. Exception: {6}")]
+            Message = "An error occurring replicating a batch. Source: {0}/{1}. Destination: {2}/{3}. Batch Size: {4}. Source Max Original Key: {5}; Destination Max Original Key: {6}. Exception: {7}")]
         public void BatchFailed(string sourceServer, string sourceDatabase, string destinationServer, string destinationDatabase, int batchSize, int sourceMaxKey, int destinationMaxKey, string exception)
         { WriteEvent(16, sourceServer, sourceDatabase, destinationServer, destinationDatabase, batchSize, sourceMaxKey, destinationMaxKey, exception); }
 
