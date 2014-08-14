@@ -169,7 +169,7 @@ namespace NuGet.Services.Work.Jobs
 
                 // Ensure the Max doesn't fall below the Min
                 MaxBatchSize = Math.Max(MaxBatchSize, MinBatchSize);
-                Log.CappingMaxBatchSize(MaxBatchSize);
+                Log.CappingMaxBatchSize(maxSuccessfulMatch, batchSize, MaxBatchSize);
             }
             else
             {
@@ -445,8 +445,8 @@ namespace NuGet.Services.Work.Jobs
         [Event(
             eventId: 17,
             Level = EventLevel.Informational,
-            Message = "Capping the max batch size to the largest successful batch size of {0}")]
-        public void CappingMaxBatchSize(int maxBatchSize) { WriteEvent(17, maxBatchSize); }
+            Message = "Capping the max batch size to the average of the largest successful batch size of {0} and the last attempted batch size of {1}. New max batch size is {2}.")]
+        public void CappingMaxBatchSize(int largestSucessful, int lastAttempt, int maxBatchSize) { WriteEvent(17, largestSucessful, lastAttempt, maxBatchSize); }
 
         [Event(
             eventId: 18,
@@ -470,7 +470,7 @@ namespace NuGet.Services.Work.Jobs
         [Event(
             eventId: 21,
             Level = EventLevel.Informational,
-            Message = "Records Remaining: {0}. Optimistic Pace: {1} / second. Optimistic Time Remaining: {2}")]
+            Message = "Records Remaining: {0}. Optimistic Pace: {1}/second. Optimistic Time Remaining: {2}")]
         public void WorkRemaining(int sourceMaxKey, int targetMaxKey, double recordsPerSecond)
         {
             int recordsRemaining = sourceMaxKey - targetMaxKey;
