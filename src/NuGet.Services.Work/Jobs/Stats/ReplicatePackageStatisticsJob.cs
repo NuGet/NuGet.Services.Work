@@ -81,8 +81,13 @@ namespace NuGet.Services.Work.Jobs
             var sourceMaxKey = await GetMaxSourceKey(Source);
             Log.GotMaxSourceKey(Source.DataSource, Source.InitialCatalog, sourceMaxKey);
 
+            Stopwatch totalTime = new Stopwatch();
+            totalTime.Start();
+
             do
             {
+                Log.ReplicatingBatch();
+
                 if ((Invocation.NextVisibleAt - DateTimeOffset.UtcNow) < MaxBatchTime)
                 {
                     // Running out of time! Extend the job.
@@ -137,6 +142,8 @@ namespace NuGet.Services.Work.Jobs
                 {
                     total += replicated;
                 }
+
+                Log.ReplicatedBatch(total, totalTime.Elapsed.TotalSeconds);
             }
             while (replicated > 0);
 
@@ -338,8 +345,8 @@ namespace NuGet.Services.Work.Jobs
             Task = Tasks.ReplicatingStatistics,
             Opcode = EventOpcode.Stop,
             Level = EventLevel.Informational,
-            Message = "Replicated {4} download facts from {0}/{1} to {2}/{3}. Duration: {5} seconds")]
-        public void ReplicatedStatistics(string sourceServer, string sourceDatabase, string destServer, string destDatabase, int count, double seconds) { WriteEvent(2, sourceServer, sourceDatabase, destServer, destDatabase, count, seconds); }
+            Message = "Replicated {4} download facts from {0}/{1} to {2}/{3}. Duration: {5}")]
+        public void ReplicatedStatistics(string sourceServer, string sourceDatabase, string destServer, string destDatabase, int count, double seconds) { WriteEvent(2, sourceServer, sourceDatabase, destServer, destDatabase, count.ToString("#,###"), TimeSpan.FromSeconds(seconds).ToString()); }
 
         [Event(
             eventId: 3,
@@ -477,7 +484,29 @@ namespace NuGet.Services.Work.Jobs
             double secondsRemaining = recordsRemaining / recordsPerSecond;
 
             TimeSpan timeRemaining = TimeSpan.FromSeconds(secondsRemaining);
-            WriteEvent(21, recordsRemaining.ToString("#,###"), (int)recordsPerSecond, timeRemaining.ToString());
+            WriteEvent(21, recordsRemaining.ToString("#,###"), (int)recordsPerSecond, timeRemaining.ToString("g"));
+        }
+
+        [Event(
+            eventId: 22,
+            Level = EventLevel.Informational,
+            Task = Tasks.ReplicatingBatch,
+            Opcode = EventOpcode.Start,
+            Message = "----- Batch Starting -----")]
+        public void ReplicatingBatch() { WriteEvent(22); }
+
+        [Event(
+            eventId: 23,
+            Level = EventLevel.Informational,
+            Task = Tasks.ReplicatingBatch,
+            Opcode = EventOpcode.Stop,
+            Message = "----- Batch Complete. Records processed so far: {0}. Total time: {1}. Overall Pace: {2}/second. -----")]
+        public void ReplicatedBatch(int totalCount, double elapsedSeconds)
+        {
+            double recordsPerSecond = totalCount / elapsedSeconds;
+            TimeSpan elapsedTime = TimeSpan.FromSeconds(elapsedSeconds);
+
+            WriteEvent(23, totalCount.ToString("#,###"), elapsedTime.ToString("g"), (int)recordsPerSecond);
         }
 
         public static class Tasks
@@ -487,6 +516,7 @@ namespace NuGet.Services.Work.Jobs
             public const EventTask FetchingStatisticsChunk = (EventTask)0x3;
             public const EventTask SavingDownloadFacts = (EventTask)0x4;
             public const EventTask GettingMaxSourceKey = (EventTask)0x5;
+            public const EventTask ReplicatingBatch = (EventTask)0x6;
         }
     }
 }
