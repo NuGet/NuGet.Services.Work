@@ -319,7 +319,7 @@
     <Compile Include="JobFailureException.cs" />
     <Compile Include="Jobs\Catalog\UpdateCatalogJob.cs" />
     <Compile Include="Jobs\Db\CleanDatabasesJob.cs" />
-    <Compile Include="Jobs\Db\MaintainDatabaseIndexesJob.cs" />
+    <Compile Include="Jobs\Db\RebuildGalleryIndexesJob.cs" />
     <Compile Include="Jobs\NuGetV2RepositoryMirrorDeletor.cs" />
     <Compile Include="Jobs\NuGetV2RepositoryMirrorerJob.cs" />
     <Compile Include="Jobs\Stats\AggregateStatisticsJob.cs" />

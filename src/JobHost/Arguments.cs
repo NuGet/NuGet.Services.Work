@@ -16,19 +16,19 @@ namespace NuGet.Services.Work.JobHost
         public string Job { get; set; }
 
         [ArgShortcut("p")]
-        [ArgDescription("The JSON dictionary payload to provide to the job")]
+        [ArgDescription("The JSON dictionary payload to provide to the job. Designed for specifying job properties directly.")]
         public string Payload { get; set; }
 
         [ArgShortcut("ep")]
-        [ArgDescription("A base64-encoded UTF8 payload string to use. Designed for command-line piping")]
+        [ArgDescription("A base64-encoded UTF8 payload string to use. Designed for command-line piping.")]
         public string EncodedPayload { get; set; }
 
         [ArgShortcut("c")]
-        [ArgDescription("The JSON dictionary configuration to provide to the job")]
+        [ArgDescription("The JSON dictionary configuration to provide to the job. Designed for using the configuration hub.")]
         public string Configuration { get; set; }
 
         [ArgShortcut("ec")]
-        [ArgDescription("A base64-encoded UTF8 configuration string to use. Designed for command-line piping")]
+        [ArgDescription("A base64-encoded UTF8 configuration string to use. Designed for command-line piping.")]
         public string EncodedConfiguration { get; set; }
     }
 }
