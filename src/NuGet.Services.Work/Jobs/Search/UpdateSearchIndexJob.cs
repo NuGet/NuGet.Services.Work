@@ -23,9 +23,8 @@ namespace NuGet.Services.Work.Jobs
                 SqlConnectionString = PackageDatabase.ConnectionString,
                 StorageAccount = StorageAccount,
                 Container = String.IsNullOrEmpty(LocalIndexFolder) ? 
-                    (IndexContainerName ?? "ng-search") :
+                    (StorageContainerName ?? "ng-search") :
                     null,
-                DataContainer = DataContainerName,
                 Folder = LocalIndexFolder,
                 Log = new EventSourceWriter(Log.IndexingTrace),
             };
