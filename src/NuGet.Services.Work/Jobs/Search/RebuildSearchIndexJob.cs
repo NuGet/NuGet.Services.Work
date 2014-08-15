@@ -36,9 +36,8 @@ namespace NuGet.Services.Work.Jobs
                 Container = String.IsNullOrEmpty(LocalIndexFolder) ?
                     IndexContainerName :
                     null,
-                DataContainer = DataContainerName,
                 Folder = LocalIndexFolder,
-                Log = new EventSourceWriter(Log.IndexingTrace),
+                Log = new EventSourceWriter(Log.IndexingTrace)
             };
             task.Execute();
             Log.FinishedIndex();
