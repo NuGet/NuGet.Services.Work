@@ -338,15 +338,20 @@ namespace NuGet.Services.Work.Jobs
             Opcode = EventOpcode.Start,
             Level = EventLevel.Informational,
             Message = "Replicating statistics from {0}/{1} to {2}/{3}")]
-        public void ReplicatingStatistics(string sourceServer, string sourceDatabase, string destServer, string destDatabase) { WriteEvent(1, sourceServer, sourceDatabase, destServer, destDatabase); }
+        public void ReplicatingStatistics(string sourceServer, string sourceDatabase, string destServer, string destDatabase)
+        { WriteEvent(1, sourceServer, sourceDatabase, destServer, destDatabase); }
 
         [Event(
             eventId: 2,
             Task = Tasks.ReplicatingStatistics,
             Opcode = EventOpcode.Stop,
             Level = EventLevel.Informational,
-            Message = "Replicated {4} download facts from {0}/{1} to {2}/{3}. Duration: {5}")]
-        public void ReplicatedStatistics(string sourceServer, string sourceDatabase, string destServer, string destDatabase, int count, double seconds) { WriteEvent(2, sourceServer, sourceDatabase, destServer, destDatabase, count.ToString("#,###"), TimeSpan.FromSeconds(seconds).ToString()); }
+            Message = "===== Replicated {4} records from {0}/{1} to {2}/{3}. Duration: {5}. Pace: {6}. =====")]
+        public void ReplicatedStatistics(string sourceServer, string sourceDatabase, string destServer, string destDatabase, int count, double seconds)
+        {
+            double perSecond = count / seconds;
+            WriteEvent(2, sourceServer, sourceDatabase, destServer, destDatabase, count.ToString("#,###"), TimeSpan.FromSeconds(seconds).ToString(), (int)perSecond);
+        }
 
         [Event(
             eventId: 3,
@@ -354,7 +359,8 @@ namespace NuGet.Services.Work.Jobs
             Opcode = EventOpcode.Start,
             Level = EventLevel.Informational,
             Message = "Getting last replicated key from {0}/{1}")]
-        public void GettingLastReplicatedKey(string server, string database) { WriteEvent(3, server, database); }
+        public void GettingLastReplicatedKey(string server, string database)
+        { WriteEvent(3, server, database); }
 
         [Event(
             eventId: 4,
@@ -362,7 +368,8 @@ namespace NuGet.Services.Work.Jobs
             Opcode = EventOpcode.Stop,
             Level = EventLevel.Informational,
             Message = "Last replicated key from {0}/{1} is {2}")]
-        public void GotLastReplicatedKey(string server, string database, int key) { WriteEvent(4, server, database, key); }
+        public void GotLastReplicatedKey(string server, string database, int key)
+        { WriteEvent(4, server, database, key); }
 
         [Event(
             eventId: 5,
@@ -370,7 +377,8 @@ namespace NuGet.Services.Work.Jobs
             Opcode = EventOpcode.Start,
             Level = EventLevel.Informational,
             Message = "Fetching {2} statistics entries from {0}/{1}")]
-        public void FetchingStatisticsChunk(string server, string database, int limit) { WriteEvent(5, server, database, limit); }
+        public void FetchingStatisticsChunk(string server, string database, int limit)
+        { WriteEvent(5, server, database, limit); }
 
         [Event(
             eventId: 6,
@@ -378,30 +386,34 @@ namespace NuGet.Services.Work.Jobs
             Opcode = EventOpcode.Stop,
             Level = EventLevel.Informational,
             Message = "Fetched {2} statistics entries from {0}/{1}")]
-        public void FetchedStatisticsChunk(string server, string database, int count) { WriteEvent(6, server, database, count); }
+        public void FetchedStatisticsChunk(string server, string database, int count)
+        { WriteEvent(6, server, database, count); }
 
         [Event(
             eventId: 7,
             Task = Tasks.SavingDownloadFacts,
             Opcode = EventOpcode.Start,
             Level = EventLevel.Informational,
-            Message = "Saving {2} download facts to {0}/{1}")]
-        public void SavingDownloadFacts(string server, string database, int count) { WriteEvent(7, server, database, count); }
+            Message = "Saving {2} records to {0}/{1}")]
+        public void SavingDownloadFacts(string server, string database, int count)
+        { WriteEvent(7, server, database, count); }
 
         [Event(
             eventId: 8,
             Task = Tasks.SavingDownloadFacts,
             Opcode = EventOpcode.Stop,
             Level = EventLevel.Informational,
-            Message = "Saved {2} download facts to {0}/{1}")]
-        public void SavedDownloadFacts(string server, string database, int count) { WriteEvent(8, server, database, count); }
+            Message = "Saved {2} records to {0}/{1}")]
+        public void SavedDownloadFacts(string server, string database, int count)
+        { WriteEvent(8, server, database, count); }
 
         [Event(
             eventId: 9,
             Task = Tasks.GettingLastReplicatedKey,
             Level = EventLevel.Warning,
             Message = "Last replicated key has not changed meaning no data was inserted last run. Stopping")]
-        public void LastReplicatedKeyNotChanged() { WriteEvent(9); }
+        public void LastReplicatedKeyNotChanged()
+        { WriteEvent(9); }
 
         /* *****************************
          * Event Id 10 used to exist
@@ -412,19 +424,22 @@ namespace NuGet.Services.Work.Jobs
             eventId: 11,
             Level = EventLevel.Informational,
             Message = "Sampling batch sizes. Min batch size: {0}; Max batch size: {1}")]
-        public void UsingFirstSampleBatchSize(int minBatch, int maxBatch) { WriteEvent(11, minBatch, maxBatch); }
+        public void UsingFirstSampleBatchSize(int minBatch, int maxBatch)
+        { WriteEvent(11, minBatch, maxBatch); }
 
         [Event(
             eventId: 12,
             Level = EventLevel.Informational,
-            Message = "Sampling batch sizes. Samples taken: {0}; Next sample size: {1}; Best sample size so far: {2} at {3} facts per second")]
-        public void UsingNextSampleBatchSize(int samplesTaken, int sampleSize, int bestSizeSoFar, double factsPerSecond) { WriteEvent(12, samplesTaken, sampleSize, bestSizeSoFar, factsPerSecond); }
+            Message = "Sampling batch sizes. Samples taken: {0}; Next sample size: {1}; Best sample size so far: {2} at {3} records per second")]
+        public void UsingNextSampleBatchSize(int samplesTaken, int sampleSize, int bestSizeSoFar, double factsPerSecond)
+        { WriteEvent(12, samplesTaken, sampleSize, bestSizeSoFar, factsPerSecond); }
 
         [Event(
             eventId: 13,
             Level = EventLevel.Informational,
-            Message = "Calculated the batch size of {0} using the best of {1} batches. Best batch sizes so far: {2}, running at the following facts per second: {3}")]
-        public void UsingCalculatedBatchSize(int sampleSize, int timesRecorded, string bestBatchSizes, string bestBatchSizePaces) { WriteEvent(13, sampleSize, timesRecorded, bestBatchSizes, bestBatchSizePaces); }
+            Message = "Calculated the batch size of {0} using the best of {1} batches. Best batch sizes so far: {2}, running at the following paces (per second): {3}")]
+        public void UsingCalculatedBatchSize(int sampleSize, int timesRecorded, string bestBatchSizes, string bestBatchSizePaces)
+        { WriteEvent(13, sampleSize, timesRecorded, bestBatchSizes, bestBatchSizePaces); }
 
         [Event(
             eventId: 14,
@@ -432,7 +447,8 @@ namespace NuGet.Services.Work.Jobs
             Opcode = EventOpcode.Start,
             Level = EventLevel.Informational,
             Message = "Getting max source key key from {0}/{1}")]
-        public void GettingMaxSourceKey(string server, string database) { WriteEvent(14, server, database); }
+        public void GettingMaxSourceKey(string server, string database)
+        { WriteEvent(14, server, database); }
 
         [Event(
             eventId: 15,
@@ -440,7 +456,8 @@ namespace NuGet.Services.Work.Jobs
             Opcode = EventOpcode.Stop,
             Level = EventLevel.Informational,
             Message = "The max source key from {0}/{1} is {2}")]
-        public void GotMaxSourceKey(string server, string database, int key) { WriteEvent(15, server, database, key); }
+        public void GotMaxSourceKey(string server, string database, int key)
+        { WriteEvent(15, server, database, key); }
 
         [Event(
             eventId: 16,
@@ -453,19 +470,22 @@ namespace NuGet.Services.Work.Jobs
             eventId: 17,
             Level = EventLevel.Informational,
             Message = "Capping the max batch size to the average of the largest successful batch size of {0} and the last attempted batch size of {1}. New max batch size is {2}.")]
-        public void CappingMaxBatchSize(int largestSucessful, int lastAttempt, int maxBatchSize) { WriteEvent(17, largestSucessful, lastAttempt, maxBatchSize); }
+        public void CappingMaxBatchSize(int largestSucessful, int lastAttempt, int maxBatchSize)
+        { WriteEvent(17, largestSucessful, lastAttempt, maxBatchSize); }
 
         [Event(
             eventId: 18,
             Level = EventLevel.Informational,
             Message = "Reducing the batch size window down to {0} - {1}")]
-        public void ReducingBatchSizes(int minBatchSize, int maxBatchSize) { WriteEvent(18, minBatchSize, maxBatchSize); }
+        public void ReducingBatchSizes(int minBatchSize, int maxBatchSize)
+        { WriteEvent(18, minBatchSize, maxBatchSize); }
 
         [Event(
             eventId: 19,
             Level = EventLevel.Informational,
             Message = "Batch of {0} records succeeded in {1} seconds ({2}/second)")]
-        public void SuccessfulBatch(int batchSize, double elapsedSeconds, double perSecond) { WriteEvent(19, batchSize, elapsedSeconds, perSecond); }
+        public void SuccessfulBatch(int batchSize, double elapsedSeconds, double perSecond)
+        { WriteEvent(19, batchSize, elapsedSeconds, perSecond); }
 
         [Event(
             eventId: 20,
@@ -493,7 +513,8 @@ namespace NuGet.Services.Work.Jobs
             Task = Tasks.ReplicatingBatch,
             Opcode = EventOpcode.Start,
             Message = "----- Batch Starting -----")]
-        public void ReplicatingBatch() { WriteEvent(22); }
+        public void ReplicatingBatch()
+        { WriteEvent(22); }
 
         [Event(
             eventId: 23,
