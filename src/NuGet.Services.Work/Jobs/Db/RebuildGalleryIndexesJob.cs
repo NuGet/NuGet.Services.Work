@@ -125,8 +125,6 @@ namespace NuGet.Services.Work.Jobs
             ALTER INDEX [PK__Packages__C41E02887160FA94] ON [Packages] REBUILD WITH (ONLINE=ON);
             ALTER INDEX [PK_CuratedFeeds] ON [CuratedFeeds] REBUILD WITH (ONLINE=ON);
             */
-
-            EXEC sp_updatestats
             ";
     }
 
