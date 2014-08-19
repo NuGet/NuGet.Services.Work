@@ -57,8 +57,8 @@ namespace NuGet.Services.Work.Jobs
             FROM @temp t
             INNER JOIN Dimension_Package ON Dimension_Package.Id = t.Dimension_Package_Id";
 
-        public static readonly string DefaultContainerName = "ng-search";
-        public static readonly string ReportName = "data/downloads.v1.json";
+        public static readonly string DefaultContainerName = "ng-search-data";
+        public static readonly string ReportName = "downloads.v1.json";
 
         public SqlConnectionStringBuilder WarehouseConnection { get; set; }
         public SqlConnectionStringBuilder PackagesConnection { get; set; }

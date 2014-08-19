@@ -21,8 +21,8 @@ namespace NuGet.Services.Work.Jobs
     public class GenerateSearchRankingsJob : ReportGeneratingJobBase<GenerateSearchRankingsEventSource>
     {
         public static readonly int DefaultRankingCount = 250;
-        public static readonly string DefaultContainerName = "ng-search";
-        public static readonly string ReportName = "data/rankings.v1.json";
+        public static readonly string DefaultContainerName = "ng-search-data";
+        public static readonly string ReportName = "rankings.v1.json";
 
         public SqlConnectionStringBuilder WarehouseConnection { get; set; }
         public int? RankingCount { get; set; }
