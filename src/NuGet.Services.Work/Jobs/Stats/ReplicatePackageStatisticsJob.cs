@@ -57,7 +57,8 @@ namespace NuGet.Services.Work.Jobs
                 var count = await Replicate();
                 watch.Stop();
 
-                Log.ReplicatedStatistics(Source.DataSource, Source.InitialCatalog, Destination.DataSource, Destination.InitialCatalog, count, watch.Elapsed.TotalSeconds);
+                double perSecond = count / watch.Elapsed.TotalSeconds;
+                Log.ReplicatedStatistics(Source.DataSource, Source.InitialCatalog, Destination.DataSource, Destination.InitialCatalog, count, watch.Elapsed.TotalSeconds, (int)perSecond);
             }
             catch (Exception ex)
             {
@@ -110,7 +111,9 @@ namespace NuGet.Services.Work.Jobs
 
                 if (recordsPerSecond > 0)
                 {
-                    Log.WorkRemaining(sourceMaxKey, targetMaxKey, recordsPerSecond);
+                    int recordsRemaining = sourceMaxKey - targetMaxKey;
+                    double secondsRemaining = recordsRemaining / recordsPerSecond;
+                    Log.WorkRemaining(recordsRemaining, (int)recordsPerSecond, TimeSpan.FromSeconds(secondsRemaining).ToString("g"));
                 }
 
                 try
@@ -143,7 +146,8 @@ namespace NuGet.Services.Work.Jobs
                     total += replicated;
                 }
 
-                Log.ReplicatedBatch(total, totalTime.Elapsed.TotalSeconds);
+                recordsPerSecond = total / totalTime.Elapsed.TotalSeconds;
+                Log.ReplicatedBatch(total, TimeSpan.FromSeconds(totalTime.Elapsed.TotalSeconds).ToString("g"), (int)recordsPerSecond);
             }
             while (replicated > 0);
 
@@ -347,11 +351,8 @@ namespace NuGet.Services.Work.Jobs
             Opcode = EventOpcode.Stop,
             Level = EventLevel.Informational,
             Message = "===== Replicated {4} records from {0}/{1} to {2}/{3}. Duration: {5}. Pace: {6}. =====")]
-        public void ReplicatedStatistics(string sourceServer, string sourceDatabase, string destServer, string destDatabase, int count, double seconds)
-        {
-            double perSecond = count / seconds;
-            WriteEvent(2, sourceServer, sourceDatabase, destServer, destDatabase, count.ToString("#,###"), TimeSpan.FromSeconds(seconds).ToString(), (int)perSecond);
-        }
+        public void ReplicatedStatistics(string sourceServer, string sourceDatabase, string destServer, string destDatabase, int count, double seconds, int perSecond)
+        { WriteEvent(2, sourceServer, sourceDatabase, destServer, destDatabase, count.ToString("#,###"), TimeSpan.FromSeconds(seconds).ToString(), perSecond); }
 
         [Event(
             eventId: 3,
@@ -498,13 +499,9 @@ namespace NuGet.Services.Work.Jobs
             eventId: 21,
             Level = EventLevel.Informational,
             Message = "Records Remaining: {0}. Optimistic Pace: {1}/second. Optimistic Time Remaining: {2}")]
-        public void WorkRemaining(int sourceMaxKey, int targetMaxKey, double recordsPerSecond)
+        public void WorkRemaining(int recordsRemaining, int recordsPerSecond, string timeRemaining)
         {
-            int recordsRemaining = sourceMaxKey - targetMaxKey;
-            double secondsRemaining = recordsRemaining / recordsPerSecond;
-
-            TimeSpan timeRemaining = TimeSpan.FromSeconds(secondsRemaining);
-            WriteEvent(21, recordsRemaining.ToString("#,###"), (int)recordsPerSecond, timeRemaining.ToString("g"));
+            WriteEvent(21, recordsRemaining, recordsPerSecond, timeRemaining);
         }
 
         [Event(
@@ -522,12 +519,9 @@ namespace NuGet.Services.Work.Jobs
             Task = Tasks.ReplicatingBatch,
             Opcode = EventOpcode.Stop,
             Message = "----- Batch Complete. Records processed so far: {0}. Total time: {1}. Overall Pace: {2}/second. -----")]
-        public void ReplicatedBatch(int totalCount, double elapsedSeconds)
+        public void ReplicatedBatch(int totalCount, string elapsedTime, int recordsPerSecond)
         {
-            double recordsPerSecond = totalCount / elapsedSeconds;
-            TimeSpan elapsedTime = TimeSpan.FromSeconds(elapsedSeconds);
-
-            WriteEvent(23, totalCount.ToString("#,###"), elapsedTime.ToString("g"), (int)recordsPerSecond);
+            WriteEvent(23, totalCount, elapsedTime, recordsPerSecond);
         }
 
         public static class Tasks
