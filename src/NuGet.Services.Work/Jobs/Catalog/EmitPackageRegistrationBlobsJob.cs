@@ -119,7 +119,7 @@ namespace NuGet.Services.Work.Jobs
                 lastCursor);
             Log.EmittedResolverBlobs();
 
-            await this.Enqueue(this.Invocation.Job, this.Invocation.Payload, TimeSpan.FromSeconds(3));
+            await this.Enqueue(this.Invocation.Job, this.Invocation.Payload, TimeSpan.FromSeconds(3), this.Invocation.JobInstanceName);
         }
 
         private async Task StoreCursor(NuGet.Services.Metadata.Catalog.Persistence.Storage storage, Uri cursorUri, CollectorCursor value)

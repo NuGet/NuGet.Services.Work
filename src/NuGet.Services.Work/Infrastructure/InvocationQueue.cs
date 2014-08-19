@@ -79,9 +79,9 @@ namespace NuGet.Services.Work
             return Enqueue(job, source, payload, TimeSpan.Zero, jobInstanceName: null, unlessAlreadyRunning: unlessAlreadyRunning);
         }
 
-        public virtual Task<InvocationState> Enqueue(string job, string source, Dictionary<string, string> payload, TimeSpan invisibleFor)
+        public virtual Task<InvocationState> Enqueue(string job, string source, Dictionary<string, string> payload, TimeSpan invisibleFor, string jobInstanceName = null)
         {
-            return Enqueue(job, source, payload, invisibleFor, jobInstanceName: null, unlessAlreadyRunning: false);
+            return Enqueue(job, source, payload, invisibleFor, jobInstanceName, unlessAlreadyRunning: false);
         }
 
         public virtual async Task<InvocationState> Enqueue(string job, string source, Dictionary<string, string> payload, TimeSpan invisibleFor, string jobInstanceName, bool unlessAlreadyRunning)
@@ -103,7 +103,7 @@ namespace NuGet.Services.Work
                     Payload = payloadString,
                     NextVisibleAt = invisibleUntil.UtcDateTime,
                     InstanceName = InstanceName,
-                    JobInstanceName = jobInstanceName,
+                    JobInstanceName = jobInstanceName ?? job, // Can consider changing the stored procedures to not accept NULL
                     UnlessAlreadyRunning = unlessAlreadyRunning
                 });
             if (row == null)
@@ -550,7 +550,7 @@ namespace NuGet.Services.Work
                 throw new NotSupportedException();
             }
 
-            public override Task<InvocationState> Enqueue(string job, string source, Dictionary<string, string> payload, TimeSpan invisibleFor)
+            public override Task<InvocationState> Enqueue(string job, string source, Dictionary<string, string> payload, TimeSpan invisibleFor, string jobInstanceName = null)
             {
                 throw new NotSupportedException();
             }

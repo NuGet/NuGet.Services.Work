@@ -76,10 +76,10 @@ namespace NuGet.Services.Work
             return Enqueue(JobAttribute.Get(job).Name, payload, delayFor);
         }
 
-        public virtual Task<InvocationState> Enqueue(string job, Dictionary<string, string> payload, TimeSpan delayFor)
+        public virtual Task<InvocationState> Enqueue(string job, Dictionary<string, string> payload, TimeSpan delayFor, string jobInstanceName = null)
         {
             string source = Context.Invocation.Id.ToString("N");
-            return Context.Queue.Enqueue(job, source, payload, delayFor);
+            return Context.Queue.Enqueue(job, source, payload, delayFor, jobInstanceName);
         }
 
         protected virtual Task<bool> Extend(TimeSpan duration)
