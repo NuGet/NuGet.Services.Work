@@ -16,7 +16,8 @@ namespace NuGet.Services.Work.Jobs.Bases
     {
         public SqlConnectionStringBuilder PackageDatabase { get; set; }
         public CloudStorageAccount StorageAccount { get; set; }
-        public string StorageContainerName { get; set; }
+        public string IndexContainerName { get; set; }
+        public string DataContainerName { get; set; }
         public string LocalIndexFolder { get; set; }
 
         protected ConfigurationHub Config { get; set; }
@@ -33,7 +34,7 @@ namespace NuGet.Services.Work.Jobs.Bases
             // Load default values
             PackageDatabase = PackageDatabase ?? Config.Sql.Legacy;
             StorageAccount = StorageAccount ?? Config.Storage.Primary;
-            StorageContainerName = StorageContainerName ?? "ng-search";
+            IndexContainerName = IndexContainerName ?? "ng-search";
 
             return result;
         }
