@@ -65,7 +65,7 @@ namespace NuGet.Services.Work.Jobs
                 caught = ex;
             }
 
-            await this.Enqueue(this.Invocation.Job, this.Invocation.Payload, TimeSpan.FromMinutes(3));
+            await this.Enqueue(this.Invocation.Job, this.Invocation.Payload, TimeSpan.FromMinutes(3), this.Invocation.JobInstanceName);
 
             if (caught != null)
             {

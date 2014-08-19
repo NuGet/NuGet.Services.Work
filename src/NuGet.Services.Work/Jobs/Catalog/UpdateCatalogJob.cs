@@ -103,7 +103,7 @@ namespace NuGet.Services.Work.Jobs.Catalog
                 await ExtendIfNeeded(TimeSpan.FromMinutes(10));
             }
 
-            await this.Enqueue(this.Invocation.Job, this.Invocation.Payload, TimeSpan.FromSeconds(3));
+            await this.Enqueue(this.Invocation.Job, this.Invocation.Payload, TimeSpan.FromSeconds(3), this.Invocation.JobInstanceName);
         }
 
         private CollectorHttpClient CreateHttpClient()

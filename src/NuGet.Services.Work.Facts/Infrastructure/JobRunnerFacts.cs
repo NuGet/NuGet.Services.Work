@@ -371,14 +371,14 @@ namespace NuGet.Services.Work.Infrastructure
                     .Completes(new InvocationResult(result, result == ExecutionResult.Faulted ? new Exception() : null, TimeSpan.FromDays(365)))
                     .Verifiable();
                 runner.MockQueue
-                    .Setup(q => q.Enqueue("test", Constants.Source_RepeatingJob, It.IsAny<Dictionary<string, string>>(), TimeSpan.FromDays(365)))
+                    .Setup(q => q.Enqueue("test", Constants.Source_RepeatingJob, It.IsAny<Dictionary<string, string>>(), TimeSpan.FromDays(365), null))
                     .Completes(repeat);
 
                 // Act
                 await runner.Dispatch(invocation, cts.Token);
 
                 // Assert
-                runner.MockQueue.Verify(q => q.Enqueue(invocation.Job, Constants.Source_RepeatingJob, invocation.Payload, TimeSpan.FromDays(365)));
+                runner.MockQueue.Verify(q => q.Enqueue(invocation.Job, Constants.Source_RepeatingJob, invocation.Payload, TimeSpan.FromDays(365), null));
             }
         }
 
@@ -415,7 +415,7 @@ namespace NuGet.Services.Work.Infrastructure
                     .Setup(q => q.Enqueue(It.IsAny<string>(), It.IsAny<string>()))
                     .Completes((InvocationState)null);
                 MockQueue
-                    .Setup(q => q.Enqueue(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<TimeSpan>()))
+                    .Setup(q => q.Enqueue(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<TimeSpan>(), null))
                     .Completes((InvocationState)null);
                 MockQueue
                     .Setup(q => q.Suspend(It.IsAny<InvocationState>(), It.IsAny<Dictionary<string, string>>(), It.IsAny<TimeSpan>(), It.IsAny<string>()))
