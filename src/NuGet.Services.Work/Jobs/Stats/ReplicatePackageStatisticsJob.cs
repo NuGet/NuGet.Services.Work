@@ -205,7 +205,7 @@ namespace NuGet.Services.Work.Jobs
                 Log.SavingDownloadFacts(Destination.InitialCatalog, Destination.DataSource, batchCount);
                 if (!WhatIf)
                 {
-                    await PutDownloadRecords(batch);
+                    await PutDownloadRecords(batch, originalKey);
                 }
                 Log.SavedDownloadFacts(Destination.InitialCatalog, Destination.DataSource, batchCount);
             }
@@ -276,7 +276,7 @@ namespace NuGet.Services.Work.Jobs
             }
         }
 
-        private async Task PutDownloadRecords(XDocument batch)
+        private async Task PutDownloadRecords(XDocument batch, int expectedLastOriginalKey)
         {
             using (var connection = await Destination.ConnectTo())
             {
@@ -284,6 +284,7 @@ namespace NuGet.Services.Work.Jobs
                 {
                     command.CommandType = CommandType.StoredProcedure;
                     command.Parameters.Add(new SqlParameter("@facts", batch.ToString()));
+                    command.Parameters.Add(new SqlParameter("@expectedLastOriginalKey", expectedLastOriginalKey));
                     await command.ExecuteNonQueryAsync();
                 }
             }
