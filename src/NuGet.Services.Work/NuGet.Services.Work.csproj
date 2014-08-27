@@ -15,7 +15,7 @@
     <FileAlignment>512</FileAlignment>
     <RoleType>Worker</RoleType>
     <BuildPackage>true</BuildPackage>
-    <NuGetPackageImportStamp>2db98e4e</NuGetPackageImportStamp>
+    <NuGetPackageImportStamp>5affa6c2</NuGetPackageImportStamp>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -181,17 +181,15 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\packages\WindowsAzure.Storage.4.1.0\lib\net40\Microsoft.WindowsAzure.Storage.dll</HintPath>
     </Reference>
-    <Reference Include="Newtonsoft.Json, Version=6.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\packages\Newtonsoft.Json.6.0.3\lib\net45\Newtonsoft.Json.dll</HintPath>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>..\..\packages\Newtonsoft.Json.6.0.4\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="NuGet.Core, Version=2.8.50812.551, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\packages\Nuget.Core.2.8.3-alpha0001\lib\net40-Client\NuGet.Core.dll</HintPath>
     </Reference>
-    <Reference Include="NuGet.Indexing, Version=3.0.37.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\packages\NuGet.Indexing.3.0.37-r-master\lib\net45\NuGet.Indexing.dll</HintPath>
+    <Reference Include="NuGet.Indexing">
+      <HintPath>..\..\packages\NuGet.Indexing.3.0.43-r-master\lib\net45\NuGet.Indexing.dll</HintPath>
     </Reference>
     <Reference Include="NuGet.Services.Metadata.Catalog, Version=3.0.84.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
@@ -209,7 +207,7 @@
       <HintPath>..\..\packages\NuGet.Versioning.0.1.0-alpha\lib\portable-net40+win\NuGet.Versioning.dll</HintPath>
     </Reference>
     <Reference Include="NuGetGallery.Core">
-      <HintPath>..\..\packages\NuGetGallery.Core.3.0.89-r-master\lib\net45\NuGetGallery.Core.dll</HintPath>
+      <HintPath>..\..\packages\NuGetGallery.Core.3.0.102-r-master\lib\net45\NuGetGallery.Core.dll</HintPath>
     </Reference>
     <Reference Include="Owin">
       <HintPath>..\..\packages\Owin.1.0\lib\net40\Owin.dll</HintPath>
