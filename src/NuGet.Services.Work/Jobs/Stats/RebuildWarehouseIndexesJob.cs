@@ -46,7 +46,7 @@ namespace NuGet.Services.Work.Jobs
                     rebuild.CommandTimeout = CommandTimeout > 0 ? CommandTimeout :
                         60 * // seconds
                         60 * // minutes
-                        4;   // hours
+                        8;   // hours
 
                     await Extend(TimeSpan.FromSeconds(rebuild.CommandTimeout));
                     await rebuild.ExecuteNonQueryAsync();
