@@ -1,6 +1,7 @@
-NuGet.Services.Work
-===================
+# NuGet.Services.Work
 
-Worker that executes queued jobs for the various NuGet Services
+This repo contains NuGet's worker that executes queued jobs for the various NuGet Services.
 
-Got bugs? File them here: https://github.com/NuGet/NuGetGallery/issues
+## Feedback
+
+Check out the [contributing](http://docs.nuget.org/contribute) page to see the best places to log issues and start discussions. The [NuGet Home](https://github.com/NuGet/Home) repo provides an overview of the different NuGet projects available.
